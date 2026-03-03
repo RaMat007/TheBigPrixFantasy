@@ -1,0 +1,17 @@
+
+quiniela-f1-v2.1UI/
+├── app.py
+├── backend.py
+├── styles.css
+├── requirements.txt
+├── README.md
+├── estructura_proyecto.txt
+├── data/
+│   ├── usuarios.json
+│   ├── picks.json
+│   ├── pilotos.json
+│   ├── carreras.json
+│   ├── standings.csv
+│   └── lock.json
+└── assets/
+    └── pilotos/

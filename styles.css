@@ -1,0 +1,57 @@
+/* Dark racing theme */
+section[data-testid="stSidebar"] { background-color: #0b1220; color: white; }
+body { background-color: #071026; color: #e6eef8; }
+.stButton>button { background-color: #ff4d4f; color: white; border-radius:6px;}
+
+.stButton>button:hover { background-color: #e04344; color: white; }
+.stButton>button:focus { box-shadow: 0 0 0 0.2rem rgba(255, 77, 79, 0.5); }
+.stTextarea>textarea { background-color: #1c2533; color: white; border-radius:6px; }
+.stTextInput>input { background-color: #1c2533; color: white; border-radius:6px; }
+.stSelectbox>div { background-color: #1c2533; color: white; border-radius:6px; }
+.stMultiSelect>div { background-color: #1c2533; color: white; border-radius:6px; }
+.stCheckbox>div { background-color: #1c2533; color: white; border-radius:6px; }
+.stRadio>div { background-color: #1c2533; color: white; border-radius:6px; }
+.stDateInput>div { background-color: #1c2533; color: white; border-radius:6px; }
+.stNumberInput>div { background-color: #1c2533; color: white; border-radius:6px; }
+.stSlider>div { background-color: #1c2533; color: white; border-radius:6px; }
+.stProgress>div { background-color: #ff4d4f; border-radius:6px; }
+.stTable { background-color: #1c2533; color: white; border-radius:6px; }
+.stMarkdown { color: #e6eef8; }
+
+/* Tarjetas de carreras (Calendario) */
+.f1-card {
+	background: linear-gradient(135deg, #111827 0%, #020617 100%);
+	border-radius: 12px;
+	padding: 12px 14px;
+	margin-bottom: 16px;
+	border: 1px solid rgba(148, 163, 184, 0.35);
+	box-shadow: 0 8px 16px rgba(0,0,0,0.45);
+}
+
+.f1-card-header {
+	font-size: 0.75rem;
+	text-transform: uppercase;
+	letter-spacing: 0.08em;
+	color: #9ca3af;
+	margin-bottom: 4px;
+}
+
+.f1-card-title {
+	font-size: 0.95rem;
+	font-weight: 600;
+	color: #e5e7eb;
+}
+
+.f1-card-meta {
+	font-size: 0.78rem;
+	color: #9ca3af;
+	margin-top: 2px;
+}
+
+.f1-card-footer {
+	display: flex;
+	justify-content: space-between;
+	margin-top: 8px;
+	font-size: 0.75rem;
+	color: #d1d5db;
+}
