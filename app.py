@@ -64,7 +64,21 @@ IMG_DIR_PISTAS = BASE_DIR / "data" / "img" / "pistas"
 IMG_DIR_PILOTOS = BASE_DIR / "data" / "img" / "pilotos"
 
 # Aseguramos que la base (y las nuevas columnas de carreras) estén migradas
-init_db()
+try:
+    init_db()
+except Exception as _db_err:
+    import streamlit as _st
+    import urllib.parse as _up
+    # Mostrar URL sin contraseña para diagnóstico
+    try:
+        from db import _get_database_url
+        _url = _get_database_url()
+        _p = _up.urlparse(_url)
+        _safe = f"{_p.scheme}://{_p.username}:***@{_p.hostname}:{_p.port}{_p.path}"
+    except Exception:
+        _safe = "(no se pudo leer DATABASE_URL)"
+    _st.error(f"❌ Error de conexión:\n\n`{_db_err}`\n\n**URL usada (sin contraseña):** `{_safe}`")
+    _st.stop()
 
 
 def _load_css():
