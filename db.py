@@ -21,28 +21,41 @@ def _get_database_url():
 
 def get_connection():
     import time
+    url = _get_database_url()
+    parsed = urllib.parse.urlparse(url)
+    password = urllib.parse.unquote(parsed.password or "")
+    port = parsed.port or 5432
+    dbname = parsed.path.lstrip("/")
+
+    # Obtener todas las IPs del pooler (round-robin) y probar cada una
+    import socket
+    try:
+        all_ips = list({r[4][0] for r in socket.getaddrinfo(parsed.hostname, port, socket.AF_INET)})
+    except Exception:
+        all_ips = [parsed.hostname]
+
     last_error = None
-    for attempt in range(5):
-        try:
-            url = _get_database_url()
-            parsed = urllib.parse.urlparse(url)
-            conn = psycopg2.connect(
-                host=parsed.hostname,
-                port=parsed.port or 5432,
-                dbname=parsed.path.lstrip("/"),
-                user=parsed.username,
-                password=urllib.parse.unquote(parsed.password or ""),
-                sslmode="require",
-                connect_timeout=10,
-                cursor_factory=psycopg2.extras.RealDictCursor
-            )
-            log.info("Conexión a la base de datos establecida.")
-            return conn
-        except Exception as e:
-            last_error = e
-            log.warning(f"Intento {attempt+1}/5 fallido: {e}")
-            time.sleep(2)
-    log.error(f"Error al conectar tras 5 intentos: {last_error}")
+    for ip in all_ips:
+        for attempt in range(3):
+            try:
+                conn = psycopg2.connect(
+                    host=ip,
+                    port=port,
+                    dbname=dbname,
+                    user=parsed.username,
+                    password=password,
+                    sslmode="require",
+                    connect_timeout=10,
+                    cursor_factory=psycopg2.extras.RealDictCursor
+                )
+                log.info(f"Conexión establecida a {ip}:{port}")
+                return conn
+            except Exception as e:
+                last_error = e
+                log.warning(f"IP {ip} intento {attempt+1}: {e}")
+                time.sleep(1)
+
+    log.error(f"No se pudo conectar a ninguna IP del pooler: {last_error}")
     raise last_error
 
 
