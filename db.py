@@ -1,6 +1,5 @@
 # db.py
 import os
-import socket
 import psycopg2
 import psycopg2.extras
 from datetime import datetime
@@ -21,25 +20,30 @@ def _get_database_url():
 
 
 def get_connection():
-    try:
-        url = _get_database_url()
-        parsed = urllib.parse.urlparse(url)
-        # Forzar IPv4: Streamlit Cloud no soporta IPv6
-        ipv4 = socket.getaddrinfo(parsed.hostname, None, socket.AF_INET)[0][4][0]
-        conn = psycopg2.connect(
-            host=ipv4,
-            port=parsed.port or 5432,
-            dbname=parsed.path.lstrip("/"),
-            user=parsed.username,
-            password=urllib.parse.unquote(parsed.password or ""),
-            sslmode="require",
-            cursor_factory=psycopg2.extras.RealDictCursor
-        )
-        log.info("Conexión a la base de datos establecida.")
-        return conn
-    except Exception as e:
-        log.error(f"Error al conectar a la base de datos: {e}")
-        raise
+    import time
+    last_error = None
+    for attempt in range(5):
+        try:
+            url = _get_database_url()
+            parsed = urllib.parse.urlparse(url)
+            conn = psycopg2.connect(
+                host=parsed.hostname,
+                port=parsed.port or 5432,
+                dbname=parsed.path.lstrip("/"),
+                user=parsed.username,
+                password=urllib.parse.unquote(parsed.password or ""),
+                sslmode="require",
+                connect_timeout=10,
+                cursor_factory=psycopg2.extras.RealDictCursor
+            )
+            log.info("Conexión a la base de datos establecida.")
+            return conn
+        except Exception as e:
+            last_error = e
+            log.warning(f"Intento {attempt+1}/5 fallido: {e}")
+            time.sleep(2)
+    log.error(f"Error al conectar tras 5 intentos: {last_error}")
+    raise last_error
 
 
 def _column_exists(cur, table, column):
