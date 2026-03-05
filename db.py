@@ -1,9 +1,11 @@
 # db.py
 import os
+import socket
 import psycopg2
 import psycopg2.extras
 from datetime import datetime
 import hashlib
+import urllib.parse
 from logger import get_logger
 
 log = get_logger()
@@ -21,11 +23,18 @@ def _get_database_url():
 def get_connection():
     try:
         url = _get_database_url()
-        # Asegurar sslmode=require en la URL si no está ya incluido
-        if "sslmode" not in url:
-            sep = "&" if "?" in url else "?"
-            url = f"{url}{sep}sslmode=require"
-        conn = psycopg2.connect(url, cursor_factory=psycopg2.extras.RealDictCursor)
+        parsed = urllib.parse.urlparse(url)
+        # Forzar IPv4: Streamlit Cloud no soporta IPv6
+        ipv4 = socket.getaddrinfo(parsed.hostname, None, socket.AF_INET)[0][4][0]
+        conn = psycopg2.connect(
+            host=ipv4,
+            port=parsed.port or 5432,
+            dbname=parsed.path.lstrip("/"),
+            user=parsed.username,
+            password=urllib.parse.unquote(parsed.password or ""),
+            sslmode="require",
+            cursor_factory=psycopg2.extras.RealDictCursor
+        )
         log.info("Conexión a la base de datos establecida.")
         return conn
     except Exception as e:
