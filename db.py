@@ -8,12 +8,20 @@ from logger import get_logger
 
 log = get_logger()
 
-DATABASE_URL = os.environ.get("DATABASE_URL", "")
+
+def _get_database_url():
+    """Obtiene DATABASE_URL desde st.secrets (Streamlit Cloud) o variables de entorno."""
+    try:
+        import streamlit as st
+        return st.secrets["DATABASE_URL"]
+    except Exception:
+        return os.environ.get("DATABASE_URL", "")
 
 
 def get_connection():
     try:
-        conn = psycopg2.connect(DATABASE_URL, cursor_factory=psycopg2.extras.RealDictCursor)
+        url = _get_database_url()
+        conn = psycopg2.connect(url, cursor_factory=psycopg2.extras.RealDictCursor, sslmode="require")
         log.info("Conexión a la base de datos establecida.")
         return conn
     except Exception as e:
