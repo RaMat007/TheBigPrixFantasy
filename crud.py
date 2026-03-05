@@ -21,7 +21,7 @@ def crear_usuario(username, password, is_admin=0, nombre=None, apellido=None):
     cur.execute(
         """
         INSERT INTO usuarios (username, nombre, apellido, password_hash, is_admin, created_at)
-        VALUES (?, ?, ?, ?, ?, ?)
+        VALUES (%s, %s, %s, %s, %s, %s)
         """,
         (
             username,
@@ -40,7 +40,7 @@ def obtener_usuario(username, password):
     cur = conn.cursor()
     cur.execute("""
         SELECT * FROM usuarios
-        WHERE username = ? AND password = ?
+        WHERE username = %s AND password = %s
     """, (username, password))
     row = cur.fetchone()
     conn.close()
@@ -68,26 +68,26 @@ def editar_usuario(usuario_id, username, is_admin, new_password=None, nombre=Non
     conn = get_connection()
     cur = conn.cursor()
 
-    campos = ["username = ?", "is_admin = ?"]
+    campos = ["username = %s", "is_admin = %s"]
     params = [username, is_admin]
 
     if nombre is not None:
-        campos.append("nombre = ?")
+        campos.append("nombre = %s")
         params.append(nombre)
 
     if apellido is not None:
-        campos.append("apellido = ?")
+        campos.append("apellido = %s")
         params.append(apellido)
 
     if new_password:
         password_hash = hashlib.sha256(new_password.encode()).hexdigest()
-        campos.append("password_hash = ?")
+        campos.append("password_hash = %s")
         params.append(password_hash)
 
     params.append(usuario_id)
 
     cur.execute(
-        f"UPDATE usuarios SET {', '.join(campos)} WHERE id = ?",
+        f"UPDATE usuarios SET {', '.join(campos)} WHERE id = %s",
         params,
     )
 
@@ -102,8 +102,8 @@ def reset_password(usuario_id, new_password):
 
     cur.execute("""
         UPDATE usuarios
-        SET password_hash = ?
-        WHERE id = ?
+        SET password_hash = %s
+        WHERE id = %s
     """, (password_hash, usuario_id))
 
     conn.commit()
@@ -118,7 +118,7 @@ def crear_temporada(nombre, fecha_inicio, fecha_fin):
     cur = conn.cursor()
     cur.execute("""
         INSERT INTO temporadas (nombre, fecha_inicio, fecha_fin, activa)
-        VALUES (?, ?, ?, 0)
+        VALUES (%s, %s, %s, 0)
     """, (nombre, fecha_inicio, fecha_fin))
     conn.commit()
     conn.close()
@@ -144,7 +144,7 @@ def activar_temporada(temporada_id):
     cur.execute("""
         UPDATE temporadas
         SET activa = 1
-        WHERE id = ?
+        WHERE id = %s
     """, (temporada_id,))
     conn.commit()
     conn.close()
@@ -170,7 +170,7 @@ def crear_carrera(temporada_id, round_num, nombre, inicio, kms=None, vueltas=Non
     cur = conn.cursor()
     cur.execute("""
         INSERT INTO carreras (temporada_id, round, nombre, inicio, kms, vueltas, pista, hora)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
     """, (temporada_id, round_num, nombre, inicio, kms, vueltas, pista, hora))
     conn.commit()
     conn.close()
@@ -180,7 +180,7 @@ def listar_carreras_temporada(temporada_id):
     df = pd.read_sql_query("""
         SELECT *
         FROM carreras
-        WHERE temporada_id = ?
+        WHERE temporada_id = %s
         ORDER BY round
     """, conn, params=(temporada_id,))
     conn.close()
@@ -191,7 +191,7 @@ def obtener_carrera(carrera_id):
     cur = conn.cursor()
     cur.execute("""
         SELECT * FROM carreras
-        WHERE id = ?
+        WHERE id = %s
     """, (carrera_id,))
     row = cur.fetchone()
     conn.close()
@@ -202,7 +202,7 @@ def obtener_proxima_carrera(temporada_id):
     cur = conn.cursor()
     cur.execute("""
         SELECT * FROM carreras
-        WHERE temporada_id = ? AND inicio > ?
+        WHERE temporada_id = %s AND inicio > %s
         ORDER BY inicio ASC
         LIMIT 1
     """, (temporada_id, datetime.now().isoformat()))
@@ -216,8 +216,8 @@ def editar_carrera(carrera_id, round_num, nombre, inicio, kms=None, vueltas=None
 
     cur.execute("""
         UPDATE carreras
-        SET round = ?, nombre = ?, inicio = ?, kms = ?, vueltas = ?, pista = ?, hora = ?
-        WHERE id = ?
+        SET round = %s, nombre = %s, inicio = %s, kms = %s, vueltas = %s, pista = %s, hora = %s
+        WHERE id = %s
     """, (round_num, nombre, inicio, kms, vueltas, pista, hora, carrera_id))
 
     conn.commit()
@@ -228,7 +228,7 @@ def eliminar_carrera(carrera_id):
     cur = conn.cursor()
     cur.execute("""
         DELETE FROM carreras
-        WHERE id = ?
+        WHERE id = %s
     """, (carrera_id,))
     conn.commit()
     conn.close()
@@ -266,13 +266,15 @@ def actualizar_carreras_desde_f1db(temporada_id, year):
         """
         SELECT id, round
         FROM carreras
-        WHERE temporada_id = ?
+        WHERE temporada_id = %s
         """,
         (temporada_id,),
     )
     filas = cur.fetchall()
 
-    for cid, rnd in filas:
+    for row in filas:
+        cid = row["id"]
+        rnd = row["round"]
         info = detalles.get(int(rnd)) if rnd is not None else None
         if not info:
             continue
@@ -296,12 +298,12 @@ def actualizar_carreras_desde_f1db(temporada_id, year):
         cur.execute(
             """
             UPDATE carreras
-            SET kms = COALESCE(?, kms),
-                vueltas = COALESCE(?, vueltas),
-                pista = COALESCE(?, pista),
-                inicio = COALESCE(?, inicio),
-                hora = COALESCE(?, hora)
-            WHERE id = ?
+            SET kms = COALESCE(%s, kms),
+                vueltas = COALESCE(%s, vueltas),
+                pista = COALESCE(%s, pista),
+                inicio = COALESCE(%s, inicio),
+                hora = COALESCE(%s, hora)
+            WHERE id = %s
             """,
             (kms, vueltas, pista, inicio, hora, cid),
         )
@@ -317,7 +319,7 @@ def crear_piloto(codigo, nombre, escuderia):
     cur = conn.cursor()
     cur.execute("""
         INSERT INTO pilotos (codigo, nombre, escuderia, activo)
-        VALUES (?, ?, ?, 1)
+        VALUES (%s, %s, %s, 1)
     """, (codigo, nombre, escuderia))
     conn.commit()
     conn.close()
@@ -344,7 +346,7 @@ def obtener_piloto(piloto_id):
     cur.execute(
         """
         SELECT * FROM pilotos
-        WHERE id = ?
+        WHERE id = %s
         """,
         (piloto_id,),
     )
@@ -358,7 +360,7 @@ def desactivar_piloto(piloto_id):
     cur.execute("""
         UPDATE pilotos
         SET activo = 0
-        WHERE id = ?
+        WHERE id = %s
     """, (piloto_id,))
     conn.commit()
     conn.close()
@@ -369,8 +371,8 @@ def editar_piloto(piloto_id, codigo, nombre, escuderia, activo):
 
     cur.execute("""
         UPDATE pilotos
-        SET codigo = ?, nombre = ?, escuderia = ?, activo = ?
-        WHERE id = ?
+        SET codigo = %s, nombre = %s, escuderia = %s, activo = %s
+        WHERE id = %s
     """, (codigo, nombre, escuderia, activo, piloto_id))
 
     conn.commit()
@@ -384,9 +386,11 @@ def guardar_pick(usuario_id, carrera_id, piloto_id):
     conn = get_connection()
     cur = conn.cursor()
     cur.execute("""
-        INSERT OR REPLACE INTO picks
+        INSERT INTO picks
         (usuario_id, carrera_id, piloto_id, timestamp)
-        VALUES (?, ?, ?, ?)
+        VALUES (%s, %s, %s, %s)
+        ON CONFLICT (usuario_id, carrera_id)
+        DO UPDATE SET piloto_id = EXCLUDED.piloto_id, timestamp = EXCLUDED.timestamp
     """, (usuario_id, carrera_id, piloto_id, datetime.now().isoformat()))
     conn.commit()
     conn.close()
@@ -396,7 +400,7 @@ def obtener_pick_usuario(usuario_id, carrera_id):
     cur = conn.cursor()
     cur.execute("""
         SELECT * FROM picks
-        WHERE usuario_id = ? AND carrera_id = ?
+        WHERE usuario_id = %s AND carrera_id = %s
     """, (usuario_id, carrera_id))
     row = cur.fetchone()
     conn.close()
@@ -410,7 +414,7 @@ def listar_picks_carrera(carrera_id):
         FROM picks p
         JOIN usuarios u ON u.id = p.usuario_id
         JOIN pilotos pl ON pl.id = p.piloto_id
-        WHERE p.carrera_id = ?
+        WHERE p.carrera_id = %s
     """, (carrera_id,))
     rows = cur.fetchall()
     conn.close()
@@ -420,10 +424,10 @@ def pick_designado(carrera_id, piloto_id):
     conn = get_connection()
     cur = conn.cursor()
     cur.execute("""
-        SELECT COUNT(*) FROM picks
-        WHERE carrera_id = ? AND piloto_id = ?
+        SELECT COUNT(*) AS cnt FROM picks
+        WHERE carrera_id = %s AND piloto_id = %s
     """, (carrera_id, piloto_id))
-    count = cur.fetchone()[0]
+    count = cur.fetchone()["cnt"]
     conn.close()
     return count > 0
 
@@ -439,10 +443,10 @@ def top_picks_global(temporada_id, limit=10):
             ON p.piloto_id = pl.id
         LEFT JOIN carreras c
             ON c.id = p.carrera_id
-            AND c.temporada_id = ?
+            AND c.temporada_id = %s
         GROUP BY pl.id
         ORDER BY pick_count DESC, pl.nombre ASC
-        LIMIT ?
+        LIMIT %s
     """, conn, params=(temporada_id, limit))
     conn.close()
     return df
@@ -453,7 +457,7 @@ def _ensure_picks_temporada_table(cur):
     cur.execute(
         """
         CREATE TABLE IF NOT EXISTS picks_temporada (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id SERIAL PRIMARY KEY,
             usuario_id INTEGER NOT NULL,
             temporada_id INTEGER NOT NULL,
             piloto_id INTEGER NOT NULL,
@@ -474,9 +478,11 @@ def guardar_pick_temporada(usuario_id, temporada_id, piloto_id):
     _ensure_picks_temporada_table(cur)
     cur.execute(
         """
-        INSERT OR REPLACE INTO picks_temporada
+        INSERT INTO picks_temporada
         (usuario_id, temporada_id, piloto_id, timestamp)
-        VALUES (?, ?, ?, ?)
+        VALUES (%s, %s, %s, %s)
+        ON CONFLICT (usuario_id, temporada_id)
+        DO UPDATE SET piloto_id = EXCLUDED.piloto_id, timestamp = EXCLUDED.timestamp
         """,
         (usuario_id, temporada_id, piloto_id, datetime.now().isoformat()),
     )
@@ -492,7 +498,7 @@ def obtener_pick_temporada(usuario_id, temporada_id):
     cur.execute(
         """
         SELECT * FROM picks_temporada
-        WHERE usuario_id = ? AND temporada_id = ?
+        WHERE usuario_id = %s AND temporada_id = %s
         """,
         (usuario_id, temporada_id),
     )
@@ -523,8 +529,8 @@ def historial_picks_usuario(usuario_id, temporada_id):
         LEFT JOIN puntos pt
             ON pt.carrera_id = p.carrera_id
            AND pt.usuario_id = p.usuario_id
-        WHERE p.usuario_id = ?
-          AND c.temporada_id = ?
+        WHERE p.usuario_id = %s
+          AND c.temporada_id = %s
         ORDER BY c.round ASC
         """,
         conn,
@@ -558,7 +564,7 @@ def historial_picks_temporada(temporada_id):
         LEFT JOIN puntos pt
             ON pt.carrera_id = p.carrera_id
            AND pt.usuario_id = p.usuario_id
-        WHERE c.temporada_id = ?
+        WHERE c.temporada_id = %s
         ORDER BY c.round ASC, u.username ASC
         """,
         conn,
@@ -575,7 +581,7 @@ def borrar_resultados_carrera(carrera_id):
     cur = conn.cursor()
     cur.execute("""
         DELETE FROM resultados
-        WHERE carrera_id = ?
+        WHERE carrera_id = %s
     """, (carrera_id,))
     conn.commit()
     conn.close()
@@ -585,7 +591,7 @@ def guardar_resultado(carrera_id, piloto_id, posicion):
     cur = conn.cursor()
     cur.execute("""
         INSERT INTO resultados (carrera_id, piloto_id, posicion)
-        VALUES (?, ?, ?)
+        VALUES (%s, %s, %s)
     """, (carrera_id, piloto_id, posicion))
     conn.commit()
     conn.close()
@@ -632,7 +638,7 @@ def obtener_resultados_carrera(carrera_id):
                         SELECT r.piloto_id, r.posicion, p.codigo, p.nombre
         FROM resultados r
         JOIN pilotos p ON p.id = r.piloto_id
-        WHERE r.carrera_id = ?
+        WHERE r.carrera_id = %s
         ORDER BY r.posicion
     """, (carrera_id,))
     rows = cur.fetchall()
@@ -659,7 +665,7 @@ def recalcular_puntos_carrera(carrera_id):
         LEFT JOIN resultados r
             ON r.carrera_id = p.carrera_id
            AND r.piloto_id = p.piloto_id
-        WHERE p.carrera_id = ?
+        WHERE p.carrera_id = %s
         """,
         (carrera_id,),
     )
@@ -695,7 +701,7 @@ def leaderboard_temporada(temporada_id):
         JOIN resultados r 
             ON r.carrera_id = p.carrera_id
            AND r.piloto_id = p.piloto_id
-        WHERE c.temporada_id = ?
+        WHERE c.temporada_id = %s
     """, conn, params=(temporada_id,))
     conn.close()
 
@@ -724,7 +730,7 @@ def borrar_puntos_carrera(carrera_id):
     cur = conn.cursor()
     cur.execute("""
         DELETE FROM puntos
-        WHERE carrera_id = ?
+        WHERE carrera_id = %s
     """, (carrera_id,))
     conn.commit()
     conn.close()
@@ -733,9 +739,11 @@ def guardar_puntos(usuario_id, carrera_id, puntos):
     conn = get_connection()
     cur = conn.cursor()
     cur.execute("""
-        INSERT OR REPLACE INTO puntos
+        INSERT INTO puntos
         (usuario_id, carrera_id, puntos)
-        VALUES (?, ?, ?)
+        VALUES (%s, %s, %s)
+        ON CONFLICT (usuario_id, carrera_id)
+        DO UPDATE SET puntos = EXCLUDED.puntos
     """, (usuario_id, carrera_id, puntos))
     conn.commit()
     conn.close()
@@ -748,7 +756,7 @@ def leaderboard_temporada(temporada_id):
         FROM puntos pt
         JOIN usuarios u ON u.id = pt.usuario_id
         JOIN carreras c ON c.id = pt.carrera_id
-        WHERE c.temporada_id = ?
+        WHERE c.temporada_id = %s
           AND u.is_admin = 0
         GROUP BY u.id
         ORDER BY total_puntos DESC
@@ -775,7 +783,7 @@ def progreso_pilotos_temporada(temporada_id):
                 FROM puntos pt
                 JOIN usuarios u ON u.id = pt.usuario_id
                 JOIN carreras c ON c.id = pt.carrera_id
-                WHERE c.temporada_id = ?
+                WHERE c.temporada_id = %s
                     AND u.is_admin = 0
         ORDER BY c.round, u.username
         """,
@@ -813,8 +821,8 @@ def detalle_carrera(temporada_id, carrera_id):
         LEFT JOIN puntos pt
             ON pt.carrera_id = p.carrera_id
            AND pt.usuario_id = p.usuario_id
-        WHERE p.carrera_id = ?
-          AND c.temporada_id = ?
+        WHERE p.carrera_id = %s
+          AND c.temporada_id = %s
         ORDER BY puntos DESC, u.username ASC
         """,
         conn,
@@ -838,7 +846,7 @@ def listar_picks_temporada(temporada_id):
         FROM picks_temporada pt
         JOIN usuarios u ON u.id = pt.usuario_id AND u.is_admin = 0
         JOIN pilotos pl ON pl.id = pt.piloto_id
-        WHERE pt.temporada_id = ?
+        WHERE pt.temporada_id = %s
         ORDER BY u.username
         """,
         conn,
@@ -861,9 +869,9 @@ def mejores_carreras_temporada(temporada_id, limit=10):
         FROM puntos pt
         JOIN usuarios u ON u.id = pt.usuario_id AND u.is_admin = 0
         JOIN carreras c ON c.id = pt.carrera_id
-        WHERE c.temporada_id = ?
+        WHERE c.temporada_id = %s
         ORDER BY pt.puntos DESC, c.round ASC
-        LIMIT ?
+        LIMIT %s
         """,
         conn,
         params=(temporada_id, limit),

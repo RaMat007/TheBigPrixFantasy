@@ -16,14 +16,17 @@ def validar_login(username: str, password: str):
     cur = conn.cursor()
 
     # determine stored column name if legacy
-    cur.execute("PRAGMA table_info(usuarios)")
-    cols = [c["name"] for c in cur.fetchall()]
+    cur.execute("""
+        SELECT column_name FROM information_schema.columns
+        WHERE table_name = 'usuarios'
+    """)
+    cols = [c["column_name"] for c in cur.fetchall()]
     colname = "password_hash" if "password_hash" in cols else ("password" if "password" in cols else None)
     if colname is None:
         conn.close()
         return None
 
-    cur.execute(f"SELECT id, username, {colname} as pw, is_admin FROM usuarios WHERE username=?", (username,))
+    cur.execute(f"SELECT id, username, {colname} as pw, is_admin FROM usuarios WHERE username=%s", (username,))
     row = cur.fetchone()
     conn.close()
     if not row:

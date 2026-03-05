@@ -1,27 +1,32 @@
 # db.py
-import sqlite3
-from pathlib import Path
+import os
+import psycopg2
+import psycopg2.extras
 from datetime import datetime
 import hashlib
 from logger import get_logger
 
 log = get_logger()
 
-DB_PATH = Path(__file__).parent / "quiniela.db"
+DATABASE_URL = os.environ.get("DATABASE_URL", "")
 
 
 def get_connection():
     try:
-        conn = sqlite3.connect(
-            DB_PATH,
-            detect_types=sqlite3.PARSE_DECLTYPES | sqlite3.PARSE_COLNAMES
-        )
-        conn.row_factory = sqlite3.Row
+        conn = psycopg2.connect(DATABASE_URL, cursor_factory=psycopg2.extras.RealDictCursor)
         log.info("Conexión a la base de datos establecida.")
         return conn
     except Exception as e:
         log.error(f"Error al conectar a la base de datos: {e}")
         raise
+
+
+def _column_exists(cur, table, column):
+    cur.execute("""
+        SELECT column_name FROM information_schema.columns
+        WHERE table_name = %s AND column_name = %s
+    """, (table, column))
+    return cur.fetchone() is not None
 
 
 def init_db():
@@ -30,7 +35,7 @@ def init_db():
 
     cur.execute("""
     CREATE TABLE IF NOT EXISTS usuarios (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        id SERIAL PRIMARY KEY,
         username TEXT UNIQUE NOT NULL,
         nombre TEXT,
         apellido TEXT,
@@ -41,16 +46,14 @@ def init_db():
     """)
 
     # Migración en caliente: asegurar columnas extendidas en usuarios
-    cur.execute("PRAGMA table_info(usuarios)")
-    cols_usuarios = [row[1] for row in cur.fetchall()]
-    if "nombre" not in cols_usuarios:
+    if not _column_exists(cur, "usuarios", "nombre"):
         cur.execute("ALTER TABLE usuarios ADD COLUMN nombre TEXT")
-    if "apellido" not in cols_usuarios:
+    if not _column_exists(cur, "usuarios", "apellido"):
         cur.execute("ALTER TABLE usuarios ADD COLUMN apellido TEXT")
 
     cur.execute("""
     CREATE TABLE IF NOT EXISTS temporadas (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        id SERIAL PRIMARY KEY,
         nombre TEXT NOT NULL,
         fecha_inicio TEXT NOT NULL,
         fecha_fin TEXT NOT NULL,
@@ -60,11 +63,11 @@ def init_db():
 
     cur.execute("""
     CREATE TABLE IF NOT EXISTS carreras (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        id SERIAL PRIMARY KEY,
         temporada_id INTEGER NOT NULL,
         round INTEGER NOT NULL,
         nombre TEXT NOT NULL,
-        inicio DATETIME NOT NULL,
+        inicio TEXT NOT NULL,
         kms REAL,
         vueltas INTEGER,
         pista TEXT,
@@ -75,21 +78,18 @@ def init_db():
     """)
 
     # Migración en caliente: asegurar columnas extendidas en carreras
-    cur.execute("PRAGMA table_info(carreras)")
-    cols = [row[1] for row in cur.fetchall()]
-
-    if "kms" not in cols:
+    if not _column_exists(cur, "carreras", "kms"):
         cur.execute("ALTER TABLE carreras ADD COLUMN kms REAL")
-    if "vueltas" not in cols:
+    if not _column_exists(cur, "carreras", "vueltas"):
         cur.execute("ALTER TABLE carreras ADD COLUMN vueltas INTEGER")
-    if "pista" not in cols:
+    if not _column_exists(cur, "carreras", "pista"):
         cur.execute("ALTER TABLE carreras ADD COLUMN pista TEXT")
-    if "hora" not in cols:
+    if not _column_exists(cur, "carreras", "hora"):
         cur.execute("ALTER TABLE carreras ADD COLUMN hora TEXT")
 
     cur.execute("""
     CREATE TABLE IF NOT EXISTS pilotos (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        id SERIAL PRIMARY KEY,
         codigo TEXT UNIQUE NOT NULL,
         nombre TEXT NOT NULL,
         escuderia TEXT,
@@ -99,7 +99,7 @@ def init_db():
 
     cur.execute("""
     CREATE TABLE IF NOT EXISTS picks (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        id SERIAL PRIMARY KEY,
         usuario_id INTEGER NOT NULL,
         carrera_id INTEGER NOT NULL,
         piloto_id INTEGER NOT NULL,
@@ -113,7 +113,7 @@ def init_db():
 
     cur.execute("""
     CREATE TABLE IF NOT EXISTS picks_temporada (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        id SERIAL PRIMARY KEY,
         usuario_id INTEGER NOT NULL,
         temporada_id INTEGER NOT NULL,
         piloto_id INTEGER NOT NULL,
@@ -127,7 +127,7 @@ def init_db():
 
     cur.execute("""
     CREATE TABLE IF NOT EXISTS resultados (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        id SERIAL PRIMARY KEY,
         carrera_id INTEGER NOT NULL,
         piloto_id INTEGER NOT NULL,
         posicion INTEGER NOT NULL,
@@ -139,7 +139,7 @@ def init_db():
 
     cur.execute("""
     CREATE TABLE IF NOT EXISTS puntos (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        id SERIAL PRIMARY KEY,
         usuario_id INTEGER NOT NULL,
         carrera_id INTEGER NOT NULL,
         puntos INTEGER NOT NULL,
@@ -168,7 +168,7 @@ def _seed_admin(cur):
 
     cur.execute("""
         INSERT INTO usuarios (username, password_hash, is_admin, created_at)
-        VALUES (?, ?, ?, ?)
+        VALUES (%s, %s, %s, %s)
     """, (
         "admin",
         password_hash,
