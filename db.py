@@ -21,7 +21,11 @@ def _get_database_url():
 def get_connection():
     try:
         url = _get_database_url()
-        conn = psycopg2.connect(url, cursor_factory=psycopg2.extras.RealDictCursor, sslmode="require")
+        # Asegurar sslmode=require en la URL si no está ya incluido
+        if "sslmode" not in url:
+            sep = "&" if "?" in url else "?"
+            url = f"{url}{sep}sslmode=require"
+        conn = psycopg2.connect(url, cursor_factory=psycopg2.extras.RealDictCursor)
         log.info("Conexión a la base de datos establecida.")
         return conn
     except Exception as e:
