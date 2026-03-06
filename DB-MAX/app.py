@@ -14,8 +14,6 @@ import json
 import matplotlib.pyplot as plt
 import io
 import os
-
-
 def _load_circuit_layouts():
     """Carga el GeoJSON de circuitos y devuelve un dict {nombre: coords}"""
     gj_path = os.path.join('f1-circuits-master', 'f1-circuits.geojson')
@@ -251,62 +249,20 @@ _load_css()
 # LOGIN
 # =========================
 if "user_id" not in st.session_state:
-    st.title("🏎️ TheBigPrixFantasy")
+    st.title("Login")
 
-    tab_login, tab_registro = st.tabs(["Iniciar sesión", "Crear cuenta"])
+    username = st.text_input("Usuario")
+    password = st.text_input("Password", type="password")
 
-    with tab_login:
-        username = st.text_input("Usuario", key="login_user")
-        password = st.text_input("Contraseña", type="password", key="login_pass")
-        if st.button("Entrar", key="btn_login"):
-            user = validar_login(username, password)
-            if user:
-                st.session_state.user_id = user["id"]
-                st.session_state.username = user["username"]
-                st.session_state.is_admin = user["is_admin"]
-                st.rerun()
-            else:
-                st.error("Credenciales incorrectas")
-
-    with tab_registro:
-        st.subheader("Nueva cuenta")
-        reg_nombre    = st.text_input("Nombre", key="reg_nombre")
-        reg_apellido  = st.text_input("Apellido", key="reg_apellido")
-        reg_correo    = st.text_input("Correo electrónico", key="reg_correo")
-        reg_escuderia = st.text_input("Nombre de escudería", key="reg_escuderia")
-        reg_user      = st.text_input("Nombre de usuario", key="reg_user")
-        reg_pass      = st.text_input("Contraseña", type="password", key="reg_pass")
-        reg_pass2     = st.text_input("Confirmar contraseña", type="password", key="reg_pass2")
-
-        if st.button("Crear cuenta", key="btn_registro"):
-            if not all([reg_nombre, reg_apellido, reg_correo, reg_escuderia, reg_user, reg_pass]):
-                st.error("Completa todos los campos")
-            elif reg_pass != reg_pass2:
-                st.error("Las contraseñas no coinciden")
-            else:
-                try:
-                    crud.crear_usuario(
-                        username=reg_user,
-                        password=reg_pass,
-                        nombre=reg_nombre,
-                        apellido=reg_apellido,
-                        correo=reg_correo,
-                        escuderia=reg_escuderia,
-                    )
-                    st.success(f"✅ Cuenta creada. Ya puedes iniciar sesión como **{reg_user}**")
-                except Exception as e:
-                    err = str(e).lower()
-                    if "unique" in err or "duplicate" in err:
-                        if "correo" in err:
-                            st.error("Ese correo ya está registrado")
-                        elif "escuderia" in err:
-                            st.error("Ese nombre de escudería ya está en uso, elige otro")
-                        elif "username" in err:
-                            st.error("Ese nombre de usuario ya existe, elige otro")
-                        else:
-                            st.error("Uno de los datos ya está registrado (usuario, correo o escudería)")
-                    else:
-                        st.error(f"Error al crear cuenta: {e}")
+    if st.button("Entrar"):
+        user = validar_login(username, password)
+        if user:
+            st.session_state.user_id = user["id"]
+            st.session_state.username = user["username"]
+            st.session_state.is_admin = user["is_admin"]
+            st.rerun()
+        else:
+            st.error("Credenciales incorrectas")
 
     st.stop()
 
