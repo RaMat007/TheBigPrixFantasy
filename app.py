@@ -1363,100 +1363,112 @@ elif menu == "Carreras":
         st.subheader("Calendario de la temporada")
 
         df_sorted = df_view.sort_values("Round") if "Round" in df_view.columns else df_view
+        cols = st.columns(3)
 
-        import unicodedata, base64
-        def _norm(s):
-            s = str(s).strip().lower()
-            return ''.join(c for c in unicodedata.normalize('NFD', s) if unicodedata.category(c) != 'Mn')
-        _equiv = {
-            'melbourne': 'albert park circuit',
-            'shanghai': 'shanghai international circuit',
-            'suzuka': 'suzuka international racing course',
-            'bahrain': 'bahrain international circuit',
-            'jeddah': 'jeddah corniche circuit',
-            'miami': 'miami international autodrome',
-            'gilles villeneuve': 'circuit gilles-villeneuve',
-            'montreal': 'circuit gilles-villeneuve',
-            'monaco': 'circuit de monaco',
-            'catalunya': 'circuit de barcelona-catalunya',
-            'barcelona': 'circuit de barcelona-catalunya',
-            'red bull ring': 'red bull ring',
-            'silverstone': 'silverstone circuit',
-            'spa-francorchamps': 'circuit de spa-francorchamps',
-            'spa': 'circuit de spa-francorchamps',
-            'hungaroring': 'hungaroring',
-            'zandvoort': 'circuit zandvoort',
-            'monza': 'autodromo nazionale monza',
-            'madring': 'circuito de madring',
-            'madrid': 'circuito de madring',
-            'baku': 'baku city circuit',
-            'marina bay': 'marina bay street circuit',
-            'singapore': 'marina bay street circuit',
-            'americas': 'circuit of the americas',
-            'austin': 'circuit of the americas',
-            'hermanos rodriguez': 'autodromo hermanos rodriguez',
-            'mexico city': 'autodromo hermanos rodriguez',
-            'jose carlos pace': 'autodromo jose carlos pace - interlagos',
-            'interlagos': 'autodromo jose carlos pace - interlagos',
-            'las vegas': 'las vegas street circuit',
-            'lusail': 'losail international circuit',
-            'yas marina': 'yas marina circuit',
-        }
+        for idx, row in df_sorted.iterrows():
+            col = cols[idx % 3]
+            with col:
+                pista_name = str(carreras.loc[carreras['id'] == row['ID'], 'pista'].values[0]) if 'ID' in row and 'pista' in carreras.columns else str(row.get('Pista', '')).strip()
+                round_val = row.get("Round", None)
 
-        cards_html = []
-        for _, row in df_sorted.iterrows():
-            pista_name = str(carreras.loc[carreras['id'] == row['ID'], 'pista'].values[0]) if 'ID' in row and 'pista' in carreras.columns else str(row.get('Pista', '')).strip()
-            round_val  = row.get("Round", None)
-            carrera_nombre = row.get("Carrera", row.get("nombre", ""))
-            inicio_str = row.get("Inicio", row.get("inicio", ""))
-            kms        = row.get("Kms", "")
-            vueltas    = row.get("Vueltas", "")
+                img_candidates = []
+                if pista_name:
+                    slug = (
+                        pista_name.lower()
+                        .replace(" ", "-")
+                        .replace("'", "")
+                        .replace(".", "")
+                    )
+                    img_candidates.append(IMG_DIR_PISTAS / f"{slug}.png")
+                    img_candidates.append(IMG_DIR_PISTAS / f"{slug}.jpg")
 
-            pista_norm = _norm(pista_name)
-            layout_key = pista_norm if pista_norm in _CIRCUIT_LAYOUTS else _norm(_equiv.get(pista_norm, ""))
-            if layout_key in _CIRCUIT_LAYOUTS:
-                coords = _CIRCUIT_LAYOUTS[layout_key]
-                buf = _plot_layout_icon(coords, width=110, height=110)
-                b64 = base64.b64encode(buf.getvalue()).decode()
-                img_html = f"<img src='data:image/png;base64,{b64}' width='110' style='display:block;margin:auto;border-radius:6px;'/>"
-            else:
-                img_html = "<span style='color:#888;font-size:0.85rem;'>Sin layout</span>"
+                if round_val is not None:
+                    try:
+                        r_int = int(round_val)
+                        img_candidates.append(IMG_DIR_PISTAS / f"r{r_int}.png")
+                        img_candidates.append(IMG_DIR_PISTAS / f"r{r_int}.jpg")
+                    except Exception:
+                        pass
 
-            round_label = int(round_val) if round_val is not None else ''
-            cards_html.append(f"""
-            <div style="display:flex;flex-direction:column;align-items:center;padding:18px;
-                        background:#23272f;border-radius:16px;box-shadow:0 4px 16px rgba(0,0,0,0.18);
-                        border:1.5px solid #2e3140;">
-                <div style="height:120px;width:120px;display:flex;align-items:center;justify-content:center;
-                            margin-bottom:12px;background:#1a1d24;border-radius:12px;overflow:hidden;">
-                    {img_html}
+                img_path = None
+                for p in img_candidates:
+                    if p.is_file():
+                        img_path = p
+                        break
+
+                carrera_nombre = row.get("Carrera", row.get("nombre", ""))
+                inicio_str = row.get("Inicio", row.get("inicio", ""))
+                kms = row.get("Kms", "")
+                vueltas = row.get("Vueltas", "")
+
+                import unicodedata, base64
+                def normaliza(s):
+                    s = str(s).strip().lower()
+                    s = ''.join(c for c in unicodedata.normalize('NFD', s) if unicodedata.category(c) != 'Mn')
+                    return s
+                equivalencias_manual = {
+                    'melbourne': 'albert park circuit',
+                    'shanghai': 'shanghai international circuit',
+                    'suzuka': 'suzuka international racing course',
+                    'bahrain': 'bahrain international circuit',
+                    'jeddah': 'jeddah corniche circuit',
+                    'miami': 'miami international autodrome',
+                    'gilles villeneuve': 'circuit gilles-villeneuve',
+                    'montreal': 'circuit gilles-villeneuve',
+                    'monaco': 'circuit de monaco',
+                    'catalunya': 'circuit de barcelona-catalunya',
+                    'barcelona': 'circuit de barcelona-catalunya',
+                    'red bull ring': 'red bull ring',
+                    'silverstone': 'silverstone circuit',
+                    'spa-francorchamps': 'circuit de spa-francorchamps',
+                    'spa': 'circuit de spa-francorchamps',
+                    'hungaroring': 'hungaroring',
+                    'zandvoort': 'circuit zandvoort',
+                    'monza': 'autodromo nazionale monza',
+                    'madring': 'circuito de madring',
+                    'madrid': 'circuito de madring',
+                    'baku': 'baku city circuit',
+                    'marina bay': 'marina bay street circuit',
+                    'singapore': 'marina bay street circuit',
+                    'americas': 'circuit of the americas',
+                    'austin': 'circuit of the americas',
+                    'hermanos rodriguez': 'autodromo hermanos rodriguez',
+                    'mexico city': 'autodromo hermanos rodriguez',
+                    'jose carlos pace': 'autodromo jose carlos pace - interlagos',
+                    'interlagos': 'autodromo jose carlos pace - interlagos',
+                    'las vegas': 'las vegas street circuit',
+                    'lusail': 'losail international circuit',
+                    'yas marina': 'yas marina circuit',
+                }
+                pista_name_norm = normaliza(pista_name)
+                layout_key = pista_name_norm
+                if layout_key not in _CIRCUIT_LAYOUTS and pista_name_norm in equivalencias_manual:
+                    layout_key = normaliza(equivalencias_manual[pista_name_norm])
+                img_html = ""
+                if img_path is not None:
+                    img_html = f"<img src='file:///{img_path}' width='110' style='display:block;margin:auto;border-radius:6px;'/>"
+                elif layout_key in _CIRCUIT_LAYOUTS:
+                    coords = _CIRCUIT_LAYOUTS[layout_key]
+                    layout_buf = _plot_layout_icon(coords, width=110, height=110)
+                    layout_bytes = layout_buf.getvalue()
+                    layout_b64 = base64.b64encode(layout_bytes).decode('utf-8')
+                    img_html = f"<img src='data:image/png;base64,{layout_b64}' width='110' style='display:block;margin:auto;border-radius:6px;'/>"
+                else:
+                    img_html = "<span style='color:#888;font-size:0.9rem;'>Sin layout</span>"
+                st.markdown(f"""
+                <div class="f1-card" style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:18px;background:#23272f;border-radius:16px;margin-bottom:18px;min-height:240px;width:100%;max-width:340px;box-shadow:0 4px 16px rgba(0,0,0,0.13);">
+                    <div style="height:120px;width:120px;display:flex;align-items:center;justify-content:center;margin-bottom:12px;background:#23272f;border-radius:12px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.10);">
+                        {img_html}
+                    </div>
+                    <div class="f1-card-header" style="font-weight:600;font-size:1.15rem;margin-bottom:6px;color:#fff;letter-spacing:0.5px;">R{int(round_val) if round_val is not None else ''} · {pista_name}</div>
+                    <div class="f1-card-title" style="font-size:1.05rem;margin-bottom:4px;color:#e0e0e0;">{carrera_nombre}</div>
+                    <div class="f1-card-meta" style="font-size:0.92rem;margin-bottom:10px;color:#b0b0b0;">{inicio_str}</div>
+                    <div class="f1-card-footer" style="font-size:0.88rem;color:#a0a0a0;display:flex;gap:16px;">
+                        <span>{kms} km</span>
+                        <span>{vueltas} vueltas</span>
+                    </div>
                 </div>
-                <div style="font-weight:700;font-size:1.05rem;color:#fff;letter-spacing:0.4px;text-align:center;">
-                    R{round_label} · {pista_name}
-                </div>
-                <div style="font-size:1rem;color:#e0e0e0;margin-top:4px;text-align:center;">{carrera_nombre}</div>
-                <div style="font-size:0.88rem;color:#b0b0b0;margin-top:4px;text-align:center;">{inicio_str}</div>
-                <div style="font-size:0.85rem;color:#a0a0a0;margin-top:8px;display:flex;gap:14px;">
-                    <span>{kms} km</span><span>{vueltas} vueltas</span>
-                </div>
-            </div>""")
-
-        st.markdown(f"""
-        <style>
-        .carreras-grid {{
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-            gap: 18px;
-            margin-bottom: 18px;
-        }}
-        @media (max-width: 600px) {{
-            .carreras-grid {{ grid-template-columns: 1fr; }}
-        }}
-        </style>
-        <div class="carreras-grid">
-            {''.join(cards_html)}
-        </div>
-        """, unsafe_allow_html=True)
+                """, unsafe_allow_html=True)
 
         st.divider()
 
