@@ -53,16 +53,11 @@ def init_db():
     """)
 
     # Migración en caliente: asegurar columnas extendidas en usuarios
-    if not _column_exists(cur, "usuarios", "nombre"):
-        cur.execute("ALTER TABLE usuarios ADD COLUMN nombre TEXT")
-    if not _column_exists(cur, "usuarios", "apellido"):
-        cur.execute("ALTER TABLE usuarios ADD COLUMN apellido TEXT")
-    if not _column_exists(cur, "usuarios", "correo"):
-        cur.execute("ALTER TABLE usuarios ADD COLUMN correo TEXT")
-    if not _column_exists(cur, "usuarios", "escuderia"):
-        cur.execute("ALTER TABLE usuarios ADD COLUMN escuderia TEXT")
-    if not _column_exists(cur, "usuarios", "foto_perfil"):
-        cur.execute("ALTER TABLE usuarios ADD COLUMN foto_perfil TEXT")
+    cur.execute("ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS nombre TEXT")
+    cur.execute("ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS apellido TEXT")
+    cur.execute("ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS correo TEXT")
+    cur.execute("ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS escuderia TEXT")
+    cur.execute("ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS foto_perfil TEXT")
 
     cur.execute("""
     CREATE TABLE IF NOT EXISTS temporadas (
@@ -91,14 +86,10 @@ def init_db():
     """)
 
     # Migración en caliente: asegurar columnas extendidas en carreras
-    if not _column_exists(cur, "carreras", "kms"):
-        cur.execute("ALTER TABLE carreras ADD COLUMN kms REAL")
-    if not _column_exists(cur, "carreras", "vueltas"):
-        cur.execute("ALTER TABLE carreras ADD COLUMN vueltas INTEGER")
-    if not _column_exists(cur, "carreras", "pista"):
-        cur.execute("ALTER TABLE carreras ADD COLUMN pista TEXT")
-    if not _column_exists(cur, "carreras", "hora"):
-        cur.execute("ALTER TABLE carreras ADD COLUMN hora TEXT")
+    cur.execute("ALTER TABLE carreras ADD COLUMN IF NOT EXISTS kms REAL")
+    cur.execute("ALTER TABLE carreras ADD COLUMN IF NOT EXISTS vueltas INTEGER")
+    cur.execute("ALTER TABLE carreras ADD COLUMN IF NOT EXISTS pista TEXT")
+    cur.execute("ALTER TABLE carreras ADD COLUMN IF NOT EXISTS hora TEXT")
 
     cur.execute("""
     CREATE TABLE IF NOT EXISTS pilotos (

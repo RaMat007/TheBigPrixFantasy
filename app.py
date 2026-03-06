@@ -279,15 +279,12 @@ if "user_id" not in st.session_state:
     with tab_registro:
         st.subheader("Nueva cuenta")
 
-        col1, col2 = st.columns(2)
-        with col1:
-            reg_nombre    = st.text_input("Nombre", key="reg_nombre")
-            reg_correo    = st.text_input("Correo electrónico", key="reg_correo")
-            reg_pass      = st.text_input("Contraseña", type="password", key="reg_pass")
-        with col2:
-            reg_apellido  = st.text_input("Apellido", key="reg_apellido")
-            reg_escuderia = st.text_input("Nombre de escudería", help="Este será tu nombre de usuario", key="reg_escuderia")
-            reg_pass2     = st.text_input("Confirmar contraseña", type="password", key="reg_pass2")
+        reg_nombre    = st.text_input("Nombre", key="reg_nombre")
+        reg_apellido  = st.text_input("Apellido", key="reg_apellido")
+        reg_correo    = st.text_input("Correo electrónico", key="reg_correo")
+        reg_escuderia = st.text_input("Nombre de escudería", help="Este será tu nombre de usuario", key="reg_escuderia")
+        reg_pass      = st.text_input("Contraseña", type="password", key="reg_pass")
+        reg_pass2     = st.text_input("Confirmar contraseña", type="password", key="reg_pass2")
 
         if st.button("Crear cuenta", key="btn_registro"):
             if not all([reg_nombre, reg_apellido, reg_correo, reg_escuderia, reg_pass]):
