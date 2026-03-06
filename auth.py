@@ -1,6 +1,7 @@
 # auth.py
 from db import get_connection
 import hashlib
+import psycopg2.extras
 
 def hash_password(password: str) -> str:
     return hashlib.sha256(password.encode()).hexdigest()
@@ -13,7 +14,7 @@ def validar_login(username: str, password: str):
     Returns {'id','username','is_admin'} on success, else None.
     """
     conn = get_connection()
-    cur = conn.cursor()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
 
     # determine stored column name if legacy
     cur.execute("""

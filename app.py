@@ -121,18 +121,24 @@ def _build_carreras_view(carreras_df, year_hint=2026, include_id=False):
             logger.error(f"Error obteniendo detalles de F1DB para year={year_hint}: {e}")
             detalles_round = {}
 
+    def _safe_int(r):
+        try:
+            return int(r)
+        except (TypeError, ValueError):
+            return None
+
     df_view["Kms"] = df_view["round"].apply(
-        lambda r: detalles_round.get(int(r), {}).get("track_length_km", "")
+        lambda r: detalles_round.get(_safe_int(r), {}).get("track_length_km", "")
         if pd.notna(r)
         else ""
     )
     df_view["Vueltas"] = df_view["round"].apply(
-        lambda r: detalles_round.get(int(r), {}).get("laps", "")
+        lambda r: detalles_round.get(_safe_int(r), {}).get("laps", "")
         if pd.notna(r)
         else ""
     )
     df_view["Pista"] = df_view["round"].apply(
-        lambda r: detalles_round.get(int(r), {}).get("circuit_name", "")
+        lambda r: detalles_round.get(_safe_int(r), {}).get("circuit_name", "")
         if pd.notna(r)
         else ""
     )

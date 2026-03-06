@@ -2,6 +2,7 @@ from datetime import datetime
 from db import get_connection
 import pandas as pd
 import hashlib
+import psycopg2.extras
 import rules
 import time
 import f1db_integration
@@ -16,7 +17,7 @@ def crear_usuario(username, password, is_admin=0, nombre=None, apellido=None, co
     password_hash = hashlib.sha256(password.encode()).hexdigest()
 
     conn = get_connection()
-    cur = conn.cursor()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
 
     cur.execute(
         """
@@ -39,7 +40,7 @@ def crear_usuario(username, password, is_admin=0, nombre=None, apellido=None, co
 
 def obtener_usuario(username, password):
     conn = get_connection()
-    cur = conn.cursor()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     cur.execute("""
         SELECT * FROM usuarios
         WHERE username = %s AND password = %s
@@ -68,7 +69,7 @@ def editar_usuario(usuario_id, username, is_admin, new_password=None, nombre=Non
     Si se pasa new_password, también actualiza el password_hash.
     """
     conn = get_connection()
-    cur = conn.cursor()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
 
     campos = ["username = %s", "is_admin = %s"]
     params = [username, is_admin]
@@ -100,7 +101,7 @@ def reset_password(usuario_id, new_password):
     password_hash = hashlib.sha256(new_password.encode()).hexdigest()
 
     conn = get_connection()
-    cur = conn.cursor()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
 
     cur.execute("""
         UPDATE usuarios
@@ -117,7 +118,7 @@ def reset_password(usuario_id, new_password):
 # =========================
 def crear_temporada(nombre, fecha_inicio, fecha_fin):
     conn = get_connection()
-    cur = conn.cursor()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     cur.execute("""
         INSERT INTO temporadas (nombre, fecha_inicio, fecha_fin, activa)
         VALUES (%s, %s, %s, 0)
@@ -141,7 +142,7 @@ def listar_temporadas():
 
 def activar_temporada(temporada_id):
     conn = get_connection()
-    cur = conn.cursor()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     cur.execute("UPDATE temporadas SET activa = 0")
     cur.execute("""
         UPDATE temporadas
@@ -153,7 +154,7 @@ def activar_temporada(temporada_id):
 
 def obtener_temporada_activa():
     conn = get_connection()
-    cur = conn.cursor()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     cur.execute("""
         SELECT * FROM temporadas
         WHERE activa = 1
@@ -169,7 +170,7 @@ def obtener_temporada_activa():
 # =========================
 def crear_carrera(temporada_id, round_num, nombre, inicio, kms=None, vueltas=None, pista=None, hora=None):
     conn = get_connection()
-    cur = conn.cursor()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     cur.execute("""
         INSERT INTO carreras (temporada_id, round, nombre, inicio, kms, vueltas, pista, hora)
         VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
@@ -190,7 +191,7 @@ def listar_carreras_temporada(temporada_id):
 
 def obtener_carrera(carrera_id):
     conn = get_connection()
-    cur = conn.cursor()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     cur.execute("""
         SELECT * FROM carreras
         WHERE id = %s
@@ -201,7 +202,7 @@ def obtener_carrera(carrera_id):
 
 def obtener_proxima_carrera(temporada_id):
     conn = get_connection()
-    cur = conn.cursor()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     cur.execute("""
         SELECT * FROM carreras
         WHERE temporada_id = %s AND inicio > %s
@@ -214,7 +215,7 @@ def obtener_proxima_carrera(temporada_id):
 
 def editar_carrera(carrera_id, round_num, nombre, inicio, kms=None, vueltas=None, pista=None, hora=None):
     conn = get_connection()
-    cur = conn.cursor()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
 
     cur.execute("""
         UPDATE carreras
@@ -227,7 +228,7 @@ def editar_carrera(carrera_id, round_num, nombre, inicio, kms=None, vueltas=None
 
 def eliminar_carrera(carrera_id):
     conn = get_connection()
-    cur = conn.cursor()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     cur.execute("""
         DELETE FROM carreras
         WHERE id = %s
@@ -262,7 +263,7 @@ def actualizar_carreras_desde_f1db(temporada_id, year):
         return
 
     conn = get_connection()
-    cur = conn.cursor()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
 
     cur.execute(
         """
@@ -318,7 +319,7 @@ def actualizar_carreras_desde_f1db(temporada_id, year):
 # =========================
 def crear_piloto(codigo, nombre, escuderia):
     conn = get_connection()
-    cur = conn.cursor()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     cur.execute("""
         INSERT INTO pilotos (codigo, nombre, escuderia, activo)
         VALUES (%s, %s, %s, 1)
@@ -344,7 +345,7 @@ def listar_pilotos(activos_only=True):
 def obtener_piloto(piloto_id):
     """Devuelve un piloto por id o None si no existe."""
     conn = get_connection()
-    cur = conn.cursor()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     cur.execute(
         """
         SELECT * FROM pilotos
@@ -358,7 +359,7 @@ def obtener_piloto(piloto_id):
 
 def desactivar_piloto(piloto_id):
     conn = get_connection()
-    cur = conn.cursor()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     cur.execute("""
         UPDATE pilotos
         SET activo = 0
@@ -369,7 +370,7 @@ def desactivar_piloto(piloto_id):
 
 def editar_piloto(piloto_id, codigo, nombre, escuderia, activo):
     conn = get_connection()
-    cur = conn.cursor()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
 
     cur.execute("""
         UPDATE pilotos
@@ -386,7 +387,7 @@ def editar_piloto(piloto_id, codigo, nombre, escuderia, activo):
 # =========================
 def guardar_pick(usuario_id, carrera_id, piloto_id):
     conn = get_connection()
-    cur = conn.cursor()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     cur.execute("""
         INSERT INTO picks
         (usuario_id, carrera_id, piloto_id, timestamp)
@@ -399,7 +400,7 @@ def guardar_pick(usuario_id, carrera_id, piloto_id):
 
 def obtener_pick_usuario(usuario_id, carrera_id):
     conn = get_connection()
-    cur = conn.cursor()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     cur.execute("""
         SELECT * FROM picks
         WHERE usuario_id = %s AND carrera_id = %s
@@ -410,7 +411,7 @@ def obtener_pick_usuario(usuario_id, carrera_id):
 
 def listar_picks_carrera(carrera_id):
     conn = get_connection()
-    cur = conn.cursor()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     cur.execute("""
         SELECT p.*, u.username, pl.nombre AS piloto
         FROM picks p
@@ -424,7 +425,7 @@ def listar_picks_carrera(carrera_id):
 
 def pick_designado(carrera_id, piloto_id):
     conn = get_connection()
-    cur = conn.cursor()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     cur.execute("""
         SELECT COUNT(*) AS cnt FROM picks
         WHERE carrera_id = %s AND piloto_id = %s
@@ -476,7 +477,7 @@ def _ensure_picks_temporada_table(cur):
 def guardar_pick_temporada(usuario_id, temporada_id, piloto_id):
     """Guarda o actualiza la selección de 5° lugar para toda la temporada."""
     conn = get_connection()
-    cur = conn.cursor()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     _ensure_picks_temporada_table(cur)
     cur.execute(
         """
@@ -495,7 +496,7 @@ def guardar_pick_temporada(usuario_id, temporada_id, piloto_id):
 def obtener_pick_temporada(usuario_id, temporada_id):
     """Devuelve el pick de temporada (si existe) para un usuario."""
     conn = get_connection()
-    cur = conn.cursor()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     _ensure_picks_temporada_table(cur)
     cur.execute(
         """
@@ -580,7 +581,7 @@ def historial_picks_temporada(temporada_id):
 # =========================
 def borrar_resultados_carrera(carrera_id):
     conn = get_connection()
-    cur = conn.cursor()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     cur.execute("""
         DELETE FROM resultados
         WHERE carrera_id = %s
@@ -590,7 +591,7 @@ def borrar_resultados_carrera(carrera_id):
 
 def guardar_resultado(carrera_id, piloto_id, posicion):
     conn = get_connection()
-    cur = conn.cursor()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     cur.execute("""
         INSERT INTO resultados (carrera_id, piloto_id, posicion)
         VALUES (%s, %s, %s)
@@ -600,7 +601,7 @@ def guardar_resultado(carrera_id, piloto_id, posicion):
 
 def obtener_resultados_carrera(carrera_id):
     conn = get_connection()
-    cur = conn.cursor()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     cur.execute("""
 
 
@@ -659,7 +660,7 @@ def recalcular_puntos_carrera(carrera_id):
 
     # Obtener todos los picks de la carrera con su posición real (si existe)
     conn = get_connection()
-    cur = conn.cursor()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     cur.execute(
         """
         SELECT p.usuario_id, r.posicion
@@ -729,7 +730,7 @@ def leaderboard_temporada(temporada_id):
 # =========================
 def borrar_puntos_carrera(carrera_id):
     conn = get_connection()
-    cur = conn.cursor()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     cur.execute("""
         DELETE FROM puntos
         WHERE carrera_id = %s
@@ -739,7 +740,7 @@ def borrar_puntos_carrera(carrera_id):
 
 def guardar_puntos(usuario_id, carrera_id, puntos):
     conn = get_connection()
-    cur = conn.cursor()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     cur.execute("""
         INSERT INTO puntos
         (usuario_id, carrera_id, puntos)
@@ -752,7 +753,7 @@ def guardar_puntos(usuario_id, carrera_id, puntos):
 
 def leaderboard_temporada(temporada_id):
     conn = get_connection()
-    cur = conn.cursor()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     cur.execute("""
         SELECT u.username, SUM(pt.puntos) AS total_puntos
         FROM puntos pt
@@ -837,7 +838,7 @@ def detalle_carrera(temporada_id, carrera_id):
 def listar_picks_temporada(temporada_id):
     """Devuelve todos los picks de 5° de temporada (no-admins)."""
     conn = get_connection()
-    cur = conn.cursor()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     _ensure_picks_temporada_table(cur)
     df = pd.read_sql_query(
         """

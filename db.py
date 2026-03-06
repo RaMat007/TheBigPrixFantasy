@@ -21,7 +21,6 @@ def _get_database_url():
 def get_connection():
     url = _get_database_url()
     conn = psycopg2.connect(url, sslmode="require", connect_timeout=10)
-    conn.cursor_factory = psycopg2.extras.RealDictCursor
     log.info("Conexión a la base de datos establecida.")
     return conn
 
@@ -36,7 +35,7 @@ def _column_exists(cur, table, column):
 
 def init_db():
     conn = get_connection()
-    cur = conn.cursor()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
 
     cur.execute("""
     CREATE TABLE IF NOT EXISTS usuarios (
