@@ -27,7 +27,7 @@ def validar_login(username: str, password: str):
         conn.close()
         return None
 
-    cur.execute(f"SELECT id, username, {colname} as pw, is_admin FROM usuarios WHERE username=%s", (username,))
+    cur.execute(f"SELECT id, username, {colname} as pw, is_admin, escuderia, foto_perfil FROM usuarios WHERE username=%s", (username,))
     row = cur.fetchone()
     conn.close()
     if not row:
@@ -36,5 +36,11 @@ def validar_login(username: str, password: str):
     if stored is None:
         return None
     if verify_password(password, stored):
-        return {"id": row["id"], "username": row["username"], "is_admin": bool(row["is_admin"])}
+        return {
+            "id": row["id"],
+            "username": row["username"],
+            "is_admin": bool(row["is_admin"]),
+            "escuderia": row.get("escuderia") or "",
+            "foto_perfil": row.get("foto_perfil") or "",
+        }
     return None

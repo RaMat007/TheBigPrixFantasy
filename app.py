@@ -270,6 +270,8 @@ if "user_id" not in st.session_state:
                 st.session_state.user_id = user["id"]
                 st.session_state.username = user["username"]
                 st.session_state.is_admin = user["is_admin"]
+                st.session_state.escuderia = user.get("escuderia", "")
+                st.session_state.foto_perfil = user.get("foto_perfil", "")
                 st.rerun()
             else:
                 st.error("Credenciales incorrectas")
@@ -321,6 +323,23 @@ if "user_id" not in st.session_state:
 # =========================
 # SIDEBAR
 # =========================
+
+# Asegurar campos de perfil en session_state (compatibilidad con sesiones previas)
+if "escuderia" not in st.session_state or "foto_perfil" not in st.session_state:
+    from db import get_connection as _get_connection
+    import psycopg2.extras as _pg_extras
+    _conn_tmp = _get_connection()
+    _cur_tmp = _conn_tmp.cursor(cursor_factory=_pg_extras.RealDictCursor)
+    _cur_tmp.execute("SELECT escuderia, foto_perfil FROM usuarios WHERE id=%s", (st.session_state.user_id,))
+    _row_tmp = _cur_tmp.fetchone()
+    _conn_tmp.close()
+    if _row_tmp:
+        st.session_state.escuderia = _row_tmp.get("escuderia") or ""
+        st.session_state.foto_perfil = _row_tmp.get("foto_perfil") or ""
+    else:
+        st.session_state.setdefault("escuderia", "")
+        st.session_state.setdefault("foto_perfil", "")
+
 st.sidebar.success(f"Usuario: {st.session_state.username}")
 
 if st.sidebar.button("Cerrar sesión"):
@@ -710,6 +729,96 @@ if menu == "Dashboard":
     # Debe ir dentro de with col_izq:
 
     st.title("🏁 Dashboard")
+
+    # =========================
+    # PERFIL DE USUARIO
+    # =========================
+    import base64 as _b64
+
+    _foto_b64 = st.session_state.get("foto_perfil", "")
+    _escuderia_display = st.session_state.get("escuderia", "") or st.session_state.username
+
+    # Construir HTML de la foto en círculo
+    if _foto_b64:
+        _img_src = f"data:image/jpeg;base64,{_foto_b64}"
+    else:
+        # Placeholder SVG genérico con iniciales
+        _inicial = (_escuderia_display[0] if _escuderia_display else "?").upper()
+        _svg = (
+            f'<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100">'
+            f'<circle cx="50" cy="50" r="50" fill="#2e3140"/>'
+            f'<text x="50" y="67" text-anchor="middle" font-size="44" font-family="Arial" '
+            f'font-weight="bold" fill="#00eaff">{_inicial}</text></svg>'
+        )
+        _img_src = "data:image/svg+xml;base64," + _b64.b64encode(_svg.encode()).decode()
+
+    st.markdown(f"""
+    <style>
+    .profile-circle-wrap {{
+        display: flex;
+        align-items: center;
+        gap: 22px;
+        background: linear-gradient(135deg, #23272f 80%, #2e3140 100%);
+        border-radius: 18px;
+        padding: 18px 26px;
+        border: 2px solid #00eaff33;
+        margin-bottom: 22px;
+        max-width: 500px;
+    }}
+    .profile-circle-img {{
+        width: 90px;
+        height: 90px;
+        border-radius: 50%;
+        object-fit: cover;
+        border: 3px solid #00eaff;
+        box-shadow: 0 0 16px #00eaff55;
+        flex-shrink: 0;
+    }}
+    .profile-info {{
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+    }}
+    .profile-escuderia {{
+        font-size: 1.5rem;
+        font-weight: 800;
+        color: #fff;
+        letter-spacing: 0.5px;
+    }}
+    .profile-label {{
+        font-size: 0.85rem;
+        color: #00eaff;
+        text-transform: uppercase;
+        letter-spacing: 1.5px;
+    }}
+    </style>
+    <div class="profile-circle-wrap">
+        <img class="profile-circle-img" src="{_img_src}" alt="Foto de perfil"/>
+        <div class="profile-info">
+            <div class="profile-label">🏎️ Escudería</div>
+            <div class="profile-escuderia">{_escuderia_display}</div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    with st.expander("📷 Cambiar foto de perfil"):
+        _uploaded = st.file_uploader(
+            "Elige una imagen (PNG, JPG, WEBP — máx. 2 MB)",
+            type=["png", "jpg", "jpeg", "webp"],
+            key="perfil_foto_uploader",
+        )
+        if _uploaded is not None:
+            _raw_bytes = _uploaded.read()
+            if len(_raw_bytes) > 2 * 1024 * 1024:
+                st.error("La imagen supera los 2 MB. Elige una más pequeña.")
+            else:
+                _new_b64 = _b64.b64encode(_raw_bytes).decode("utf-8")
+                if st.button("Guardar foto", key="btn_guardar_foto"):
+                    crud.actualizar_foto_perfil(st.session_state.user_id, _new_b64)
+                    st.session_state.foto_perfil = _new_b64
+                    st.success("✅ Foto actualizada correctamente")
+                    st.rerun()
+
     # =========================
     # PRÓXIMA CARRERA + MI PICK (lado a lado)
     # =========================

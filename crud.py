@@ -49,6 +49,26 @@ def obtener_usuario(username, password):
     conn.close()
     return row
 
+def actualizar_foto_perfil(user_id: int, foto_b64: str):
+    """Guarda la foto de perfil (base64) en la BD para el usuario dado."""
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute(
+        "UPDATE usuarios SET foto_perfil = %s WHERE id = %s",
+        (foto_b64, user_id),
+    )
+    conn.commit()
+    conn.close()
+
+def obtener_foto_perfil(user_id: int) -> str:
+    """Devuelve la foto_perfil (base64) del usuario, o cadena vacía."""
+    conn = get_connection()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cur.execute("SELECT foto_perfil FROM usuarios WHERE id = %s", (user_id,))
+    row = cur.fetchone()
+    conn.close()
+    return (row["foto_perfil"] or "") if row else ""
+
 def listar_usuarios():
     conn = None
     try:

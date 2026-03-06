@@ -45,6 +45,7 @@ def init_db():
         apellido TEXT,
         correo TEXT UNIQUE,
         escuderia TEXT UNIQUE,
+        foto_perfil TEXT,
         password_hash TEXT NOT NULL,
         is_admin INTEGER DEFAULT 0,
         created_at TEXT NOT NULL
@@ -60,6 +61,8 @@ def init_db():
         cur.execute("ALTER TABLE usuarios ADD COLUMN correo TEXT")
     if not _column_exists(cur, "usuarios", "escuderia"):
         cur.execute("ALTER TABLE usuarios ADD COLUMN escuderia TEXT")
+    if not _column_exists(cur, "usuarios", "foto_perfil"):
+        cur.execute("ALTER TABLE usuarios ADD COLUMN foto_perfil TEXT")
 
     cur.execute("""
     CREATE TABLE IF NOT EXISTS temporadas (
