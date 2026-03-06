@@ -270,41 +270,42 @@ if "user_id" not in st.session_state:
 
     with tab_registro:
         st.subheader("Nueva cuenta")
-        reg_nombre    = st.text_input("Nombre", key="reg_nombre")
-        reg_apellido  = st.text_input("Apellido", key="reg_apellido")
-        reg_correo    = st.text_input("Correo electrónico", key="reg_correo")
-        reg_escuderia = st.text_input("Nombre de escudería", key="reg_escuderia")
-        reg_user      = st.text_input("Nombre de usuario", key="reg_user")
-        reg_pass      = st.text_input("Contraseña", type="password", key="reg_pass")
-        reg_pass2     = st.text_input("Confirmar contraseña", type="password", key="reg_pass2")
+
+        col1, col2 = st.columns(2)
+        with col1:
+            reg_nombre    = st.text_input("Nombre", key="reg_nombre")
+            reg_correo    = st.text_input("Correo electrónico", key="reg_correo")
+            reg_pass      = st.text_input("Contraseña", type="password", key="reg_pass")
+        with col2:
+            reg_apellido  = st.text_input("Apellido", key="reg_apellido")
+            reg_escuderia = st.text_input("Nombre de escudería", help="Este será tu nombre de usuario", key="reg_escuderia")
+            reg_pass2     = st.text_input("Confirmar contraseña", type="password", key="reg_pass2")
 
         if st.button("Crear cuenta", key="btn_registro"):
-            if not all([reg_nombre, reg_apellido, reg_correo, reg_escuderia, reg_user, reg_pass]):
+            if not all([reg_nombre, reg_apellido, reg_correo, reg_escuderia, reg_pass]):
                 st.error("Completa todos los campos")
             elif reg_pass != reg_pass2:
                 st.error("Las contraseñas no coinciden")
             else:
                 try:
                     crud.crear_usuario(
-                        username=reg_user,
+                        username=reg_escuderia,
                         password=reg_pass,
                         nombre=reg_nombre,
                         apellido=reg_apellido,
                         correo=reg_correo,
                         escuderia=reg_escuderia,
                     )
-                    st.success(f"✅ Cuenta creada. Ya puedes iniciar sesión como **{reg_user}**")
+                    st.success(f"✅ Cuenta creada. Ya puedes iniciar sesión como **{reg_escuderia}**")
                 except Exception as e:
                     err = str(e).lower()
                     if "unique" in err or "duplicate" in err:
                         if "correo" in err:
                             st.error("Ese correo ya está registrado")
-                        elif "escuderia" in err:
+                        elif "escuderia" in err or "username" in err:
                             st.error("Ese nombre de escudería ya está en uso, elige otro")
-                        elif "username" in err:
-                            st.error("Ese nombre de usuario ya existe, elige otro")
                         else:
-                            st.error("Uno de los datos ya está registrado (usuario, correo o escudería)")
+                            st.error("Uno de los datos ya está registrado (correo o escudería)")
                     else:
                         st.error(f"Error al crear cuenta: {e}")
 
