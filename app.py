@@ -1362,21 +1362,6 @@ elif menu == "Carreras":
         # ==== Grid de tarjetas de carreras (para todos) ====
         st.subheader("Calendario de la temporada")
 
-        st.markdown("""
-        <style>
-        @media (max-width: 768px) {
-            div[data-testid="columns"] {
-                flex-direction: column !important;
-            }
-            div[data-testid="column"] {
-                width: 100% !important;
-                min-width: 100% !important;
-                flex: 1 1 100% !important;
-            }
-        }
-        </style>
-        """, unsafe_allow_html=True)
-
         df_sorted = df_view.sort_values("Round") if "Round" in df_view.columns else df_view
         cols = st.columns(3)
 
