@@ -46,15 +46,15 @@ def validar_login(username: str, password: str):
     return None
 
 
-def verificar_correo(correo: str):
+def verificar_correo(correo: str, escuderia: str):
     """
-    Devuelve el id del usuario si el correo existe en la BD, si no None.
+    Devuelve el id del usuario si el correo Y la escudería coinciden, si no None.
     """
     conn = get_connection()
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     cur.execute(
-        "SELECT id FROM usuarios WHERE LOWER(TRIM(COALESCE(correo,'')))=LOWER(TRIM(%s)) AND correo IS NOT NULL AND correo <> ''",
-        (correo.strip(),),
+        "SELECT id FROM usuarios WHERE LOWER(TRIM(COALESCE(correo,'')))=LOWER(TRIM(%s)) AND correo IS NOT NULL AND correo <> '' AND LOWER(TRIM(COALESCE(escuderia,'')))=LOWER(TRIM(%s))",
+        (correo.strip(), escuderia.strip()),
     )
     row = cur.fetchone()
     conn.close()

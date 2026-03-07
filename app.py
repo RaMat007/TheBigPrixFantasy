@@ -278,22 +278,23 @@ if "user_id" not in st.session_state:
 
     with tab_reset:
         st.subheader("Restablecer contraseña")
-        rst_correo = st.text_input("Correo electrónico registrado", key="rst_correo")
+        rst_correo    = st.text_input("Correo electrónico registrado", key="rst_correo")
+        rst_escuderia = st.text_input("Nombre de escudería", key="rst_escuderia")
 
         if "rst_verified_id" not in st.session_state:
             st.session_state.rst_verified_id = None
 
         if st.button("Verificar", key="btn_rst_verify"):
-            if not rst_correo:
-                st.error("Introduce tu correo")
+            if not rst_correo or not rst_escuderia:
+                st.error("Introduce tu correo y tu escudería")
             else:
-                resultado = verificar_correo(rst_correo)
+                resultado = verificar_correo(rst_correo, rst_escuderia)
                 if resultado:
                     st.session_state.rst_verified_id = resultado
-                    st.success("✅ Correo verificado. Introduce tu nueva contraseña.")
+                    st.success("✅ Verificado. Introduce tu nueva contraseña.")
                 else:
                     st.session_state.rst_verified_id = None
-                    st.error("Ese correo no está registrado")
+                    st.error("Correo o escudería incorrectos")
 
         if st.session_state.get("rst_verified_id"):
             rst_new  = st.text_input("Nueva contraseña", type="password", key="rst_new")
