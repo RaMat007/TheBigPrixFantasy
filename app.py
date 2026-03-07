@@ -9,8 +9,7 @@ import f1db_integration
 from rules import calcular_puntos, carrera_bloqueada
 from auth import validar_login, verificar_correo, actualizar_password, get_usuario_by_id
 from db import init_db
-import extra_streamlit_components as stx
-from datetime import datetime as _dt
+from streamlit_cookies_controller import CookieController as _CookieController
 # --- Para layouts de pista ---
 import json
 import matplotlib.pyplot as plt
@@ -255,7 +254,7 @@ st.set_page_config(page_title="Quiniela F1", layout="wide")
 _load_css()
 
 # --- Cookies para sesión persistente ---
-_cookie_mgr = stx.CookieManager(key="f1_cookies")
+_cookie_mgr = _CookieController()
 
 # Restaurar sesión desde cookie si no hay sesión activa
 if "user_id" not in st.session_state:
@@ -264,14 +263,14 @@ if "user_id" not in st.session_state:
         try:
             _restored = get_usuario_by_id(int(_uid_cookie))
             if _restored:
-                st.session_state.user_id    = _restored["id"]
-                st.session_state.username   = _restored["username"]
-                st.session_state.is_admin   = _restored["is_admin"]
-                st.session_state.escuderia  = _restored["escuderia"]
+                st.session_state.user_id     = _restored["id"]
+                st.session_state.username    = _restored["username"]
+                st.session_state.is_admin    = _restored["is_admin"]
+                st.session_state.escuderia   = _restored["escuderia"]
                 st.session_state.foto_perfil = _restored["foto_perfil"]
                 st.rerun()
         except Exception:
-            _cookie_mgr.delete("f1_uid")
+            _cookie_mgr.remove("f1_uid")
 
 # =========================
 # LOGIN
@@ -292,7 +291,7 @@ if "user_id" not in st.session_state:
                 st.session_state.is_admin = user["is_admin"]
                 st.session_state.escuderia = user.get("escuderia", "")
                 st.session_state.foto_perfil = user.get("foto_perfil", "")
-                _cookie_mgr.set("f1_uid", str(user["id"]), expires_at=_dt(2027, 1, 1))
+                _cookie_mgr.set("f1_uid", str(user["id"]))
                 st.rerun()
             else:
                 st.error("Credenciales incorrectas")
@@ -394,7 +393,7 @@ if "escuderia" not in st.session_state or "foto_perfil" not in st.session_state:
 st.sidebar.success(f"Usuario: {st.session_state.username}")
 
 if st.sidebar.button("Cerrar sesión"):
-    _cookie_mgr.delete("f1_uid")
+    _cookie_mgr.remove("f1_uid")
     st.session_state.clear()
     st.rerun()
 

@@ -3,4 +3,4 @@ pandas
 altair
 matplotlib
 psycopg2-binary
-extra-streamlit-components
+streamlit-cookies-controller
