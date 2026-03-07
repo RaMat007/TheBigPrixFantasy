@@ -61,6 +61,27 @@ def verificar_correo(correo: str, escuderia: str):
     return row["id"] if row else None
 
 
+def get_usuario_by_id(user_id: int):
+    """Devuelve dict con datos del usuario por id, o None si no existe."""
+    conn = get_connection()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cur.execute(
+        "SELECT id, username, is_admin, escuderia, foto_perfil FROM usuarios WHERE id=%s",
+        (user_id,),
+    )
+    row = cur.fetchone()
+    conn.close()
+    if not row:
+        return None
+    return {
+        "id": row["id"],
+        "username": row["username"],
+        "is_admin": bool(row["is_admin"]),
+        "escuderia": row.get("escuderia") or "",
+        "foto_perfil": row.get("foto_perfil") or "",
+    }
+
+
 def actualizar_password(user_id: int, nueva_password: str):
     """Actualiza el hash de contraseña para el usuario dado."""
     conn = get_connection()
