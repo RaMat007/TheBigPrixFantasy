@@ -278,7 +278,7 @@ if "user_id" not in st.session_state:
 
     with tab_reset:
         st.subheader("Restablecer contraseña")
-        rst_user   = st.text_input("Usuario", key="rst_user")
+        rst_user   = st.text_input("Nombre de escudería (tu usuario)", key="rst_user")
         rst_correo = st.text_input("Correo electrónico registrado", key="rst_correo")
 
         if "rst_verified_id" not in st.session_state:
@@ -288,13 +288,16 @@ if "user_id" not in st.session_state:
             if not rst_user or not rst_correo:
                 st.error("Completa usuario y correo")
             else:
-                uid = verificar_correo(rst_user, rst_correo)
-                if uid:
-                    st.session_state.rst_verified_id = uid
+                resultado = verificar_correo(rst_user, rst_correo)
+                if resultado == "no_correo":
+                    st.session_state.rst_verified_id = None
+                    st.error("⚠️ Tu cuenta no tiene correo registrado. Pide al administrador que lo registre desde el panel de Usuarios.")
+                elif resultado:
+                    st.session_state.rst_verified_id = resultado
                     st.success("✅ Datos verificados. Introduce tu nueva contraseña.")
                 else:
                     st.session_state.rst_verified_id = None
-                    st.error("Usuario o correo no coinciden")
+                    st.error("Nombre de escudería o correo no coinciden")
 
         if st.session_state.rst_verified_id:
             rst_new  = st.text_input("Nueva contraseña", type="password", key="rst_new")
@@ -544,17 +547,18 @@ if menu == "Super Admin" and st.session_state.is_admin:
                 usuario_rows = usuarios[usuarios["id"] == usuario_seleccionado]
                 if not usuario_rows.empty:
                     u = usuario_rows.iloc[0]
+                    uid_key = usuario_seleccionado  # incluir en key para forzar re-render al cambiar usuario
                     ea1, ea2, ea3 = st.columns(3)
                     with ea1:
-                        e_username  = st.text_input("Username",  value=str(u.get("username", "")),  key="e_username")
-                        e_is_admin  = st.checkbox("Es admin", value=bool(u.get("is_admin", False)), key="e_is_admin")
-                        e_password  = st.text_input("Nueva contraseña (opcional)", type="password",  key="e_password")
+                        e_username  = st.text_input("Username",  value=str(u.get("username", "") or ""),  key=f"e_username_{uid_key}")
+                        e_is_admin  = st.checkbox("Es admin", value=bool(u.get("is_admin", False)), key=f"e_is_admin_{uid_key}")
+                        e_password  = st.text_input("Nueva contraseña (opcional)", type="password",  key=f"e_password_{uid_key}")
                     with ea2:
-                        e_nombre    = st.text_input("Nombre",    value=str(u.get("nombre",   "") or ""), key="e_nombre")
-                        e_apellido  = st.text_input("Apellido",  value=str(u.get("apellido", "") or ""), key="e_apellido")
-                        e_correo    = st.text_input("Correo",    value=str(u.get("correo",   "") or ""), key="e_correo")
+                        e_nombre    = st.text_input("Nombre",    value=str(u.get("nombre",   "") or ""), key=f"e_nombre_{uid_key}")
+                        e_apellido  = st.text_input("Apellido",  value=str(u.get("apellido", "") or ""), key=f"e_apellido_{uid_key}")
+                        e_correo    = st.text_input("Correo",    value=str(u.get("correo",   "") or ""), key=f"e_correo_{uid_key}")
                     with ea3:
-                        e_escuderia = st.text_input("Escudería", value=str(u.get("escuderia","") or ""), key="e_escuderia")
+                        e_escuderia = st.text_input("Escudería", value=str(u.get("escuderia","") or ""), key=f"e_escuderia_{uid_key}")
 
                     if st.button("Guardar cambios", key="btn_guardar_usuario"):
                         if not e_username:
