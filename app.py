@@ -493,78 +493,100 @@ if menu == "Super Admin" and st.session_state.is_admin:
     if admin_menu == "Usuarios":
         st.subheader("Usuarios")
 
-        col1, col2 = st.columns(2)
-        with col1:
-            username = st.text_input("Username")
-            password = st.text_input("Password", type="password")
-        with col2:
-            nombre = st.text_input("Nombre")
-            apellido = st.text_input("Apellido")
-            is_admin = st.checkbox("Is Admin")
+        with st.expander("➕ Crear nuevo usuario"):
+            cu1, cu2, cu3 = st.columns(3)
+            with cu1:
+                nu_username  = st.text_input("Username", key="nu_username")
+                nu_password  = st.text_input("Password", type="password", key="nu_password")
+                nu_is_admin  = st.checkbox("Es admin", key="nu_is_admin")
+            with cu2:
+                nu_nombre    = st.text_input("Nombre", key="nu_nombre")
+                nu_apellido  = st.text_input("Apellido", key="nu_apellido")
+                nu_correo    = st.text_input("Correo electrónico", key="nu_correo")
+            with cu3:
+                nu_escuderia = st.text_input("Escudería", key="nu_escuderia")
 
-        if st.button("Crear usuario"):
-            if not username or not password:
-                st.error("Username y password son obligatorios.")
-            else:
-                crud.crear_usuario(
-                    username=username,
-                    password=password,
-                    is_admin=int(is_admin),
-                    nombre=nombre or None,
-                    apellido=apellido or None,
-                )
-                st.success("Usuario creado")
-                st.rerun()
+            if st.button("Crear usuario", key="btn_crear_usuario"):
+                if not nu_username or not nu_password:
+                    st.error("Username y password son obligatorios.")
+                else:
+                    try:
+                        crud.crear_usuario(
+                            username=nu_username,
+                            password=nu_password,
+                            is_admin=int(nu_is_admin),
+                            nombre=nu_nombre or None,
+                            apellido=nu_apellido or None,
+                            correo=nu_correo or None,
+                            escuderia=nu_escuderia or None,
+                        )
+                        st.success("Usuario creado")
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Error: {e}")
 
         usuarios = crud.listar_usuarios()
         if usuarios is None or usuarios.empty:
             st.info("No hay usuarios registrados.")
         else:
-            # No mostramos el hash de password en la tabla
-            cols_to_show = [
-                c
-                for c in ["id", "username", "nombre", "apellido", "is_admin", "created_at"]
-                if c in usuarios.columns
-            ]
+            # Mostrar todo excepto el hash y la foto (demasiado larga)
+            cols_to_show = [c for c in usuarios.columns if c not in ("password_hash", "password", "foto_perfil")]
             st.dataframe(usuarios[cols_to_show], use_container_width=True, hide_index=True)
 
-            with st.expander("Editar usuario"):
+            with st.expander("✏️ Editar usuario"):
                 usuario_seleccionado = st.selectbox(
                     "Seleccione usuario",
                     usuarios["id"],
-                    format_func=lambda uid: usuarios.loc[usuarios["id"] == uid, "username"].values[0],
+                    format_func=lambda uid: f"{uid} — {usuarios.loc[usuarios['id']==uid, 'username'].values[0]}",
+                    key="sel_editar_usuario",
                 )
 
                 usuario_rows = usuarios[usuarios["id"] == usuario_seleccionado]
-                if usuario_rows.empty:
-                    st.error("No se encontró el usuario seleccionado.")
-                    nuevo_username = ""
-                    nuevo_is_admin = False
-                    nuevo_nombre = ""
-                    nuevo_apellido = ""
-                else:
-                    usuario = usuario_rows.iloc[0]
+                if not usuario_rows.empty:
+                    u = usuario_rows.iloc[0]
+                    ea1, ea2, ea3 = st.columns(3)
+                    with ea1:
+                        e_username  = st.text_input("Username",  value=str(u.get("username", "")),  key="e_username")
+                        e_is_admin  = st.checkbox("Es admin", value=bool(u.get("is_admin", False)), key="e_is_admin")
+                        e_password  = st.text_input("Nueva contraseña (opcional)", type="password",  key="e_password")
+                    with ea2:
+                        e_nombre    = st.text_input("Nombre",    value=str(u.get("nombre",   "") or ""), key="e_nombre")
+                        e_apellido  = st.text_input("Apellido",  value=str(u.get("apellido", "") or ""), key="e_apellido")
+                        e_correo    = st.text_input("Correo",    value=str(u.get("correo",   "") or ""), key="e_correo")
+                    with ea3:
+                        e_escuderia = st.text_input("Escudería", value=str(u.get("escuderia","") or ""), key="e_escuderia")
 
-                    nuevo_username = st.text_input("Nuevo username", value=usuario["username"])
-                    nuevo_is_admin = st.checkbox("Nuevo is admin", value=bool(usuario["is_admin"]))
-                    nuevo_nombre = st.text_input("Nombre", value=usuario.get("nombre", ""))
-                    nuevo_apellido = st.text_input("Apellido", value=usuario.get("apellido", ""))
+                    if st.button("Guardar cambios", key="btn_guardar_usuario"):
+                        if not e_username:
+                            st.error("El username no puede estar vacío.")
+                        else:
+                            crud.editar_usuario(
+                                usuario_id=usuario_seleccionado,
+                                username=e_username,
+                                is_admin=int(e_is_admin),
+                                new_password=e_password or None,
+                                nombre=e_nombre,
+                                apellido=e_apellido,
+                                correo=e_correo,
+                                escuderia=e_escuderia,
+                            )
+                            st.success("Usuario actualizado")
+                            st.rerun()
 
-                nuevo_password = st.text_input("Nuevo password (opcional)", type="password")
-
-                if st.button("Actualizar usuario") and not usuario_rows.empty:
-                    if not nuevo_username:
-                        st.error("El username no puede estar vacío.")
+            with st.expander("🗑️ Eliminar usuario"):
+                del_uid = st.selectbox(
+                    "Seleccione usuario a eliminar",
+                    usuarios["id"],
+                    format_func=lambda uid: f"{uid} — {usuarios.loc[usuarios['id']==uid, 'username'].values[0]}",
+                    key="sel_eliminar_usuario",
+                )
+                st.warning(f"¿Seguro que quieres eliminar este usuario? Esta acción no se puede deshacer.")
+                if st.button("Eliminar usuario", key="btn_eliminar_usuario"):
+                    if del_uid == st.session_state.user_id:
+                        st.error("No puedes eliminar tu propia cuenta.")
                     else:
-                        crud.editar_usuario(
-                            usuario_id=usuario_seleccionado,
-                            username=nuevo_username,
-                            is_admin=int(nuevo_is_admin),
-                            new_password=nuevo_password or None,
-                            nombre=nuevo_nombre,
-                            apellido=nuevo_apellido,
-                        )
-                        st.success("Usuario actualizado")
+                        crud.eliminar_usuario(del_uid)
+                        st.success("Usuario eliminado")
                         st.rerun()
 
     # Carreras

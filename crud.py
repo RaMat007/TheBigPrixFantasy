@@ -83,8 +83,8 @@ def listar_usuarios():
             conn.close()
             log.info("Conexión a la base de datos cerrada.")
 
-def editar_usuario(usuario_id, username, is_admin, new_password=None, nombre=None, apellido=None):
-    """Actualiza datos básicos de un usuario.
+def editar_usuario(usuario_id, username, is_admin, new_password=None, nombre=None, apellido=None, correo=None, escuderia=None):
+    """Actualiza todos los datos de un usuario.
 
     Si se pasa new_password, también actualiza el password_hash.
     """
@@ -102,6 +102,14 @@ def editar_usuario(usuario_id, username, is_admin, new_password=None, nombre=Non
         campos.append("apellido = %s")
         params.append(apellido)
 
+    if correo is not None:
+        campos.append("correo = %s")
+        params.append(correo)
+
+    if escuderia is not None:
+        campos.append("escuderia = %s")
+        params.append(escuderia)
+
     if new_password:
         password_hash = hashlib.sha256(new_password.encode()).hexdigest()
         campos.append("password_hash = %s")
@@ -114,6 +122,15 @@ def editar_usuario(usuario_id, username, is_admin, new_password=None, nombre=Non
         params,
     )
 
+    conn.commit()
+    conn.close()
+
+
+def eliminar_usuario(usuario_id):
+    """Elimina un usuario por su id."""
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute("DELETE FROM usuarios WHERE id = %s", (usuario_id,))
     conn.commit()
     conn.close()
 
