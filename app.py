@@ -278,8 +278,8 @@ if "user_id" not in st.session_state:
 
     with tab_reset:
         st.subheader("Restablecer contraseña")
-        rst_correo    = st.text_input("Correo electrónico registrado", key="rst_correo")
         rst_escuderia = st.text_input("Nombre de escudería", key="rst_escuderia")
+        rst_correo    = st.text_input("Correo electrónico registrado", key="rst_correo")
 
         if "rst_verified_id" not in st.session_state:
             st.session_state.rst_verified_id = None
