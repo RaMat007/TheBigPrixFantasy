@@ -256,17 +256,21 @@ _load_css()
 # --- Cookies para sesión persistente ---
 _cookie_mgr = _CookieController()
 
-# Restaurar sesión desde cookie si no hay sesión activa.
-# El componente de cookies necesita 2 renders para inicializarse:
-# render 1 → siempre devuelve None → forzamos rerun con flag.
-# render 2 → ya devuelve el valor real de la cookie.
+# El CookieController necesita que el componente JS se inicialice antes de
+# poder leer cookies. Usamos un contador de renders para esperar hasta 3 ciclos.
 if "user_id" not in st.session_state:
-    if "cookies_initialized" not in st.session_state:
-        # Primer render: el componente aún no ha cargado, forzar segundo render
-        st.session_state.cookies_initialized = True
+    _render_count = st.session_state.get("_cookie_render", 0)
+
+    if _render_count < 2:
+        st.session_state["_cookie_render"] = _render_count + 1
         st.rerun()
 
-    _uid_cookie = _cookie_mgr.get("f1_uid")
+    # Render >= 2: el componente ya debería tener los datos del browser
+    try:
+        _uid_cookie = _cookie_mgr.get("f1_uid")
+    except Exception:
+        _uid_cookie = None
+
     if _uid_cookie:
         try:
             _restored = get_usuario_by_id(int(_uid_cookie))
@@ -278,7 +282,10 @@ if "user_id" not in st.session_state:
                 st.session_state.foto_perfil = _restored["foto_perfil"]
                 st.rerun()
         except Exception:
-            _cookie_mgr.remove("f1_uid")
+            try:
+                _cookie_mgr.remove("f1_uid")
+            except Exception:
+                pass
 
 # =========================
 # LOGIN
