@@ -44,3 +44,30 @@ def validar_login(username: str, password: str):
             "foto_perfil": row.get("foto_perfil") or "",
         }
     return None
+
+
+def verificar_correo(username: str, correo: str):
+    """
+    Devuelve el id del usuario si username y correo coinciden, si no None.
+    """
+    conn = get_connection()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cur.execute(
+        "SELECT id FROM usuarios WHERE LOWER(username)=LOWER(%s) AND LOWER(correo)=LOWER(%s)",
+        (username.strip(), correo.strip()),
+    )
+    row = cur.fetchone()
+    conn.close()
+    return row["id"] if row else None
+
+
+def actualizar_password(user_id: int, nueva_password: str):
+    """Actualiza el hash de contraseña para el usuario dado."""
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute(
+        "UPDATE usuarios SET password_hash=%s WHERE id=%s",
+        (hash_password(nueva_password), user_id),
+    )
+    conn.commit()
+    conn.close()

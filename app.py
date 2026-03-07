@@ -7,7 +7,7 @@ from logger import get_logger
 import crud
 import f1db_integration
 from rules import calcular_puntos, carrera_bloqueada
-from auth import validar_login
+from auth import validar_login, verificar_correo, actualizar_password
 from db import init_db
 # --- Para layouts de pista ---
 import json
@@ -259,7 +259,7 @@ _load_css()
 if "user_id" not in st.session_state:
     st.title("🏎️ TheBigPrixFantasy")
 
-    tab_login, tab_registro = st.tabs(["Iniciar sesión", "Crear cuenta"])
+    tab_login, tab_registro, tab_reset = st.tabs(["Iniciar sesión", "Crear cuenta", "Restablecer contraseña"])
 
     with tab_login:
         username = st.text_input("Usuario", key="login_user")
@@ -275,6 +275,39 @@ if "user_id" not in st.session_state:
                 st.rerun()
             else:
                 st.error("Credenciales incorrectas")
+
+    with tab_reset:
+        st.subheader("Restablecer contraseña")
+        rst_user   = st.text_input("Usuario", key="rst_user")
+        rst_correo = st.text_input("Correo electrónico registrado", key="rst_correo")
+
+        if "rst_verified_id" not in st.session_state:
+            st.session_state.rst_verified_id = None
+
+        if st.button("Verificar", key="btn_rst_verify"):
+            if not rst_user or not rst_correo:
+                st.error("Completa usuario y correo")
+            else:
+                uid = verificar_correo(rst_user, rst_correo)
+                if uid:
+                    st.session_state.rst_verified_id = uid
+                    st.success("✅ Datos verificados. Introduce tu nueva contraseña.")
+                else:
+                    st.session_state.rst_verified_id = None
+                    st.error("Usuario o correo no coinciden")
+
+        if st.session_state.rst_verified_id:
+            rst_new  = st.text_input("Nueva contraseña", type="password", key="rst_new")
+            rst_new2 = st.text_input("Confirmar nueva contraseña", type="password", key="rst_new2")
+            if st.button("Guardar nueva contraseña", key="btn_rst_save"):
+                if not rst_new:
+                    st.error("La contraseña no puede estar vacía")
+                elif rst_new != rst_new2:
+                    st.error("Las contraseñas no coinciden")
+                else:
+                    actualizar_password(st.session_state.rst_verified_id, rst_new)
+                    st.session_state.rst_verified_id = None
+                    st.success("✅ Contraseña actualizada. Ya puedes iniciar sesión.")
 
     with tab_registro:
         st.subheader("Nueva cuenta")
