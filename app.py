@@ -878,6 +878,12 @@ if menu == "Dashboard":
 
     proxima = crud.obtener_proxima_carrera(temporada_id)
 
+    # Auto-asignar pick por defecto (primer piloto) a todos los usuarios sin pick
+    if proxima and not carrera_bloqueada(proxima["inicio"]):
+        _pilotos_auto = crud.listar_pilotos()
+        if not _pilotos_auto.empty:
+            crud.auto_asignar_picks_faltantes(proxima["id"], int(_pilotos_auto.iloc[0]["id"]))
+
     col_izq, col_der = st.columns(2)
 
     # Bloque Próxima carrera (izquierda)
@@ -1127,6 +1133,7 @@ if menu == "Dashboard":
     st.subheader("📈 Standings General")
 
     progreso = crud.progreso_pilotos_temporada(temporada_id)
+    usuarios_puntos = crud.listar_usuarios_con_puntos(temporada_id)
 
     if not progreso.empty:
         # Matriz resumen: filas = usuarios, columnas = carreras, con total al inicio
@@ -1219,13 +1226,13 @@ if menu == "Dashboard":
                 x=alt.X(
                     "round:Q",
                     title="Round",
-                    axis=alt.Axis(grid=False),  # sin grid vertical
+                    axis=alt.Axis(grid=False),
                 ),
                 y=alt.Y(
                     "PuntosAcum:Q",
                     title="Puntos acumulados",
                     scale=alt.Scale(domain=[0, max_y + 1 if max_y > 0 else 1]),
-                    axis=alt.Axis(grid=True, tickCount=5),  # menos líneas horizontales
+                    axis=alt.Axis(grid=True, tickCount=5),
                 ),
                 color=alt.Color(
                     "Usuario:N",
@@ -1239,8 +1246,74 @@ if menu == "Dashboard":
         )
 
         st.altair_chart(chart, use_container_width=True)
+
     else:
-        st.info("Aún no hay carreras con puntos calculados.")
+        # Sin resultados aún: mostrar gráfica vacía con ejes
+        palette = [
+            "#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd",
+            "#8c564b", "#e377c2", "#7f7f7f", "#bcbd22", "#17becf",
+        ]
+        if not usuarios_puntos.empty:
+            _nombres = usuarios_puntos["username"].tolist()
+            user_color = {u: palette[i % len(palette)] for i, u in enumerate(_nombres)}
+            _zero_rows = [{"round": 0, "Usuario": u, "PuntosAcum": 0} for u in _nombres]
+            import pandas as _pd_tmp
+            chart_df_vacio = _pd_tmp.DataFrame(_zero_rows)
+            chart_vacio = (
+                alt.Chart(chart_df_vacio)
+                .mark_line(point=True)
+                .encode(
+                    x=alt.X("round:Q", title="Round", axis=alt.Axis(grid=False)),
+                    y=alt.Y("PuntosAcum:Q", title="Puntos acumulados",
+                            scale=alt.Scale(domain=[0, 1]),
+                            axis=alt.Axis(grid=True, tickCount=5)),
+                    color=alt.Color(
+                        "Usuario:N",
+                        scale=alt.Scale(
+                            domain=list(user_color.keys()),
+                            range=list(user_color.values()),
+                        ),
+                        legend=None,
+                    ),
+                )
+            )
+            st.altair_chart(chart_vacio, use_container_width=True)
+        else:
+            st.caption("Aún no hay resultados registrados.")
+
+    # Lista nominal de jugadores con foto de perfil y puntos
+    st.markdown("### 🏎️ Jugadores")
+    if not usuarios_puntos.empty:
+        import base64 as _b64_nom
+        _cols_nom = st.columns(min(len(usuarios_puntos), 4))
+        for _idx, _urow in enumerate(usuarios_puntos.itertuples()):
+            with _cols_nom[_idx % len(_cols_nom)]:
+                _esc = (_urow.escuderia or _urow.username or "?")
+                _fp  = _urow.foto_perfil or ""
+                if _fp:
+                    _src = f"data:image/jpeg;base64,{_fp}"
+                else:
+                    _ini = _esc[0].upper()
+                    _svg = (
+                        f'<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64">'
+                        f'<circle cx="32" cy="32" r="32" fill="#2e3140"/>'
+                        f'<text x="32" y="44" text-anchor="middle" font-size="28" '
+                        f'font-family="Arial" font-weight="bold" fill="#00eaff">{_ini}</text></svg>'
+                    )
+                    _src = "data:image/svg+xml;base64," + _b64_nom.b64encode(_svg.encode()).decode()
+                st.markdown(
+                    f"""
+                    <div style="text-align:center;background:#23272f;border-radius:14px;
+                                padding:14px 8px;border:1.5px solid #00eaff22;margin-bottom:8px;">
+                        <img src="{_src}" style="width:64px;height:64px;border-radius:50%;
+                                    object-fit:cover;border:2px solid #00eaff;margin-bottom:8px;"/>
+                        <div style="font-weight:700;color:#fff;font-size:0.9rem;white-space:nowrap;
+                                    overflow:hidden;text-overflow:ellipsis;">{_esc}</div>
+                        <div style="color:#00eaff;font-size:1.1rem;font-weight:800;">{int(_urow.total_puntos)} pts</div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
    
 # =========================
 # MI PICK

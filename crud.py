@@ -918,3 +918,49 @@ def mejores_carreras_temporada(temporada_id, limit=10):
     )
     conn.close()
     return df
+
+
+def auto_asignar_picks_faltantes(carrera_id: int, primer_piloto_id: int):
+    """Para todos los usuarios no-admin sin pick en esta carrera, asigna primer_piloto_id."""
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute(
+        """
+        INSERT INTO picks (usuario_id, carrera_id, piloto_id, timestamp)
+        SELECT u.id, %s, %s, %s
+        FROM usuarios u
+        WHERE u.is_admin = 0
+          AND NOT EXISTS (
+              SELECT 1 FROM picks p
+              WHERE p.usuario_id = u.id AND p.carrera_id = %s
+          )
+        ON CONFLICT (usuario_id, carrera_id) DO NOTHING
+        """,
+        (carrera_id, primer_piloto_id, datetime.now().isoformat(), carrera_id),
+    )
+    conn.commit()
+    conn.close()
+
+
+def listar_usuarios_con_puntos(temporada_id: int):
+    """Devuelve todos los usuarios no-admin con sus puntos totales en la temporada (0 si no hay)."""
+    conn = get_connection()
+    df = pd.read_sql_query(
+        """
+        SELECT u.id, u.username, u.escuderia, u.foto_perfil,
+               COALESCE(SUM(sub.puntos), 0) AS total_puntos
+        FROM usuarios u
+        LEFT JOIN (
+            SELECT pt.usuario_id, pt.puntos
+            FROM puntos pt
+            JOIN carreras c ON c.id = pt.carrera_id AND c.temporada_id = %s
+        ) sub ON sub.usuario_id = u.id
+        WHERE u.is_admin = 0
+        GROUP BY u.id, u.username, u.escuderia, u.foto_perfil
+        ORDER BY total_puntos DESC, u.username ASC
+        """,
+        conn,
+        params=(temporada_id,),
+    )
+    conn.close()
+    return df
