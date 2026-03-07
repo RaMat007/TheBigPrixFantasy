@@ -256,8 +256,16 @@ _load_css()
 # --- Cookies para sesión persistente ---
 _cookie_mgr = _CookieController()
 
-# Restaurar sesión desde cookie si no hay sesión activa
+# Restaurar sesión desde cookie si no hay sesión activa.
+# El componente de cookies necesita 2 renders para inicializarse:
+# render 1 → siempre devuelve None → forzamos rerun con flag.
+# render 2 → ya devuelve el valor real de la cookie.
 if "user_id" not in st.session_state:
+    if "cookies_initialized" not in st.session_state:
+        # Primer render: el componente aún no ha cargado, forzar segundo render
+        st.session_state.cookies_initialized = True
+        st.rerun()
+
     _uid_cookie = _cookie_mgr.get("f1_uid")
     if _uid_cookie:
         try:
