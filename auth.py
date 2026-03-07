@@ -46,33 +46,26 @@ def validar_login(username: str, password: str):
     return None
 
 
-def verificar_correo(username: str, correo: str):
+def verificar_correo(correo: str, nombre: str, apellido: str):
     """
-    Devuelve el id del usuario si username/escuderia y correo coinciden.
-    Devuelve None si no existe o no coinciden.
-    Devuelve 'no_correo' si el usuario existe pero no tiene correo registrado.
+    Devuelve el id del usuario si correo + nombre + apellido coinciden.
+    Devuelve None si no hay coincidencia.
     """
     conn = get_connection()
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-    # Buscar por username O por escuderia (son iguales en la mayoría de casos)
     cur.execute(
         """
-        SELECT id, correo FROM usuarios
-        WHERE LOWER(TRIM(username))=LOWER(TRIM(%s))
-           OR LOWER(TRIM(COALESCE(escuderia,'')))=LOWER(TRIM(%s))
-        LIMIT 1
+        SELECT id FROM usuarios
+        WHERE LOWER(TRIM(COALESCE(correo,'')))   = LOWER(TRIM(%s))
+          AND LOWER(TRIM(COALESCE(nombre,'')))   = LOWER(TRIM(%s))
+          AND LOWER(TRIM(COALESCE(apellido,''))) = LOWER(TRIM(%s))
+          AND correo IS NOT NULL AND correo <> ''
         """,
-        (username.strip(), username.strip()),
+        (correo.strip(), nombre.strip(), apellido.strip()),
     )
     row = cur.fetchone()
     conn.close()
-    if not row:
-        return None
-    if not row["correo"]:
-        return "no_correo"
-    if row["correo"].strip().lower() == correo.strip().lower():
-        return row["id"]
-    return None
+    return row["id"] if row else None
 
 
 def actualizar_password(user_id: int, nueva_password: str):

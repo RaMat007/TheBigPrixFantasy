@@ -278,28 +278,30 @@ if "user_id" not in st.session_state:
 
     with tab_reset:
         st.subheader("Restablecer contraseña")
-        rst_user   = st.text_input("Nombre de escudería (tu usuario)", key="rst_user")
-        rst_correo = st.text_input("Correo electrónico registrado", key="rst_correo")
+        st.caption("Introduce tu correo, nombre y apellido tal como los registraste.")
+        rst_correo   = st.text_input("Correo electrónico", key="rst_correo")
+        rc1, rc2 = st.columns(2)
+        with rc1:
+            rst_nombre   = st.text_input("Nombre", key="rst_nombre")
+        with rc2:
+            rst_apellido = st.text_input("Apellido", key="rst_apellido")
 
         if "rst_verified_id" not in st.session_state:
             st.session_state.rst_verified_id = None
 
         if st.button("Verificar", key="btn_rst_verify"):
-            if not rst_user or not rst_correo:
-                st.error("Completa usuario y correo")
+            if not rst_correo or not rst_nombre or not rst_apellido:
+                st.error("Completa todos los campos")
             else:
-                resultado = verificar_correo(rst_user, rst_correo)
-                if resultado == "no_correo":
-                    st.session_state.rst_verified_id = None
-                    st.error("⚠️ Tu cuenta no tiene correo registrado. Pide al administrador que lo registre desde el panel de Usuarios.")
-                elif resultado:
+                resultado = verificar_correo(rst_correo, rst_nombre, rst_apellido)
+                if resultado:
                     st.session_state.rst_verified_id = resultado
                     st.success("✅ Datos verificados. Introduce tu nueva contraseña.")
                 else:
                     st.session_state.rst_verified_id = None
-                    st.error("Nombre de escudería o correo no coinciden")
+                    st.error("Los datos no coinciden con ninguna cuenta registrada")
 
-        if st.session_state.rst_verified_id:
+        if st.session_state.get("rst_verified_id"):
             rst_new  = st.text_input("Nueva contraseña", type="password", key="rst_new")
             rst_new2 = st.text_input("Confirmar nueva contraseña", type="password", key="rst_new2")
             if st.button("Guardar nueva contraseña", key="btn_rst_save"):
