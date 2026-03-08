@@ -216,6 +216,7 @@ def crear_carrera(temporada_id, round_num, nombre, inicio, kms=None, vueltas=Non
     conn.commit()
     conn.close()
 
+@st.cache_data(ttl=60)
 def listar_carreras_temporada(temporada_id):
     conn = get_connection()
     df = pd.read_sql_query("""
@@ -238,6 +239,7 @@ def obtener_carrera(carrera_id):
     conn.close()
     return row
 
+@st.cache_data(ttl=30)
 def obtener_proxima_carrera(temporada_id):
     conn = get_connection()
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
@@ -365,6 +367,7 @@ def crear_piloto(codigo, nombre, escuderia):
     conn.commit()
     conn.close()
 
+@st.cache_data(ttl=120)
 def listar_pilotos(activos_only=True):
     conn = None
     try:
@@ -437,6 +440,8 @@ def guardar_pick(usuario_id, carrera_id, piloto_id):
     """, (usuario_id, carrera_id, piloto_id, datetime.now().isoformat()))
     conn.commit()
     conn.close()
+    # Invalidar caches afectados
+    st.cache_data.clear()
 
 def obtener_pick_usuario(usuario_id, carrera_id):
     conn = get_connection()
@@ -474,6 +479,7 @@ def pick_designado(carrera_id, piloto_id):
     conn.close()
     return count > 0
 
+@st.cache_data(ttl=60)
 def top_picks_global(temporada_id, limit=10):
     """Top pilotos más pickeados en carreras que ya se jugaron (tienen al menos un resultado)."""
     conn = get_connection()
@@ -587,6 +593,7 @@ def historial_picks_usuario(usuario_id, temporada_id):
     return df
 
 
+@st.cache_data(ttl=60)
 def auto_pilotos_por_temporada(temporada_id: int) -> dict:
     """Devuelve {round: piloto_codigo} para las carreras con auto_piloto_id asignado."""
     conn = get_connection()
@@ -833,6 +840,7 @@ def leaderboard_temporada(temporada_id):
     return rows
 
 
+@st.cache_data(ttl=60)
 def progreso_pilotos_temporada(temporada_id):
     """Devuelve la progresión de puntos por carrera para cada usuario.
 
