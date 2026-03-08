@@ -88,8 +88,10 @@ def init_db():
     # Migración en caliente: asegurar columnas extendidas en carreras
     cur.execute("ALTER TABLE carreras ADD COLUMN IF NOT EXISTS kms REAL")
     cur.execute("ALTER TABLE carreras ADD COLUMN IF NOT EXISTS vueltas INTEGER")
+    cur.execute("ALTER TABLE carreras ADD COLUMN IF NOT EXISTS auto_piloto_id INTEGER")
     cur.execute("ALTER TABLE carreras ADD COLUMN IF NOT EXISTS pista TEXT")
     cur.execute("ALTER TABLE carreras ADD COLUMN IF NOT EXISTS hora TEXT")
+    cur.execute("ALTER TABLE picks ADD COLUMN IF NOT EXISTS auto_asignado INTEGER DEFAULT 0")
 
     cur.execute("""
     CREATE TABLE IF NOT EXISTS pilotos (

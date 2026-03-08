@@ -377,9 +377,9 @@ if st.sidebar.button("Cerrar sesión"):
     st.rerun()
 
 if st.session_state.is_admin:
-    menu_opciones = ["Super Admin", "Dashboard", "Carreras", "Race View", "Bonos"]
+    menu_opciones = ["Super Admin", "Dashboard", "Escuderías", "Carreras", "Race View", "Bonos"]
 else:
-    menu_opciones = ["Dashboard", "Mi Pick", "Carreras", "Race View", "Bonos"]
+    menu_opciones = ["Dashboard", "Mi Pick", "Escuderías", "Carreras", "Race View", "Bonos"]
 
 menu = st.sidebar.selectbox("Menú", menu_opciones)
 
@@ -665,6 +665,35 @@ if menu == "Super Admin" and st.session_state.is_admin:
                     st.success("Carrera eliminada")
                     st.rerun()
 
+        with st.expander("🤖 Auto-pick por carrera"):
+            st.caption("Marca qué piloto fue el auto-asignado en cada carrera pasada. Esto evita que se repita en carreras futuras.")
+            _pilotos_ap = crud.listar_pilotos()
+            _carreras_ap = crud.listar_carreras_temporada(temporada_id)
+            if not _carreras_ap.empty and not _pilotos_ap.empty:
+                _piloto_opts = {row["id"]: f"{row['codigo']} — {row['nombre']}" for _, row in _pilotos_ap.iterrows()}
+                for _, _car in _carreras_ap.iterrows():
+                    _ap_id = _car.get("auto_piloto_id") or _car.get("auto_piloto_id", None)
+                    _ap_label = _piloto_opts.get(_ap_id, "— Sin marcar —") if _ap_id else "— Sin marcar —"
+                    _col_a, _col_b, _col_c = st.columns([2, 3, 2])
+                    _col_a.write(f"**R{_car['round']}** {_car['nombre']}")
+                    _sel_ap = _col_b.selectbox(
+                        "",
+                        options=[None] + list(_piloto_opts.keys()),
+                        format_func=lambda x: "— Sin marcar —" if x is None else _piloto_opts[x],
+                        index=([None] + list(_piloto_opts.keys())).index(_ap_id) if _ap_id in _piloto_opts else 0,
+                        key=f"ap_sel_{_car['id']}",
+                        label_visibility="collapsed",
+                    )
+                    if _col_c.button("Guardar", key=f"ap_btn_{_car['id']}"):
+                        if _sel_ap:
+                            crud.set_auto_piloto_carrera(int(_car["id"]), int(_sel_ap))
+                            st.success(f"R{_car['round']} marcado como {_piloto_opts[_sel_ap]}")
+                            st.rerun()
+                        else:
+                            crud.set_auto_piloto_carrera(int(_car["id"]), None)
+                            st.info(f"R{_car['round']} desmarcado")
+                            st.rerun()
+
     # Resultados
     if admin_menu == "Resultados":
         st.title("🏁 Cargar resultados de carrera")
@@ -792,8 +821,15 @@ if menu == "Dashboard":
     _escuderia_display = st.session_state.get("escuderia", "") or st.session_state.username
 
     # Construir HTML de la foto en círculo
+    def _mime_b64(s):
+        if not s: return "image/jpeg"
+        if s[:4] == "/9j/": return "image/jpeg"
+        if s[:5] == "iVBOR": return "image/png"
+        if s[:5] == "UklGR": return "image/webp"
+        return "image/jpeg"
+
     if _foto_b64:
-        _img_src = f"data:image/jpeg;base64,{_foto_b64}"
+        _img_src = f"data:{_mime_b64(_foto_b64)};base64,{_foto_b64}"
     else:
         # Placeholder SVG genérico con iniciales
         _inicial = (_escuderia_display[0] if _escuderia_display else "?").upper()
@@ -878,11 +914,12 @@ if menu == "Dashboard":
 
     proxima = crud.obtener_proxima_carrera(temporada_id)
 
-    # Auto-asignar pick por defecto (primer piloto) a todos los usuarios sin pick
+    # Sincronizar auto_piloto_id en todas las carreras (pasadas y próxima)
+    crud.sincronizar_auto_picks_temporada(temporada_id)
+
+    # Auto-asignar pick por defecto a usuarios sin pick en la próxima carrera
     if proxima and not carrera_bloqueada(proxima["inicio"]):
-        _pilotos_auto = crud.listar_pilotos()
-        if not _pilotos_auto.empty:
-            crud.auto_asignar_picks_faltantes(proxima["id"], int(_pilotos_auto.iloc[0]["id"]))
+        crud.auto_asignar_picks_faltantes(proxima["id"], 0)
 
     col_izq, col_der = st.columns(2)
 
@@ -900,6 +937,13 @@ if menu == "Dashboard":
             max-width: 370px;
             border: 2.5px solid #00eaff44;
             position: relative;
+            margin-left: auto;
+            margin-right: auto;
+        }
+        @media (max-width: 768px) {
+            .f1-card-modern {
+                max-width: 100%;
+            }
         }
         .f1-card-modern .f1-countdown {
             background: linear-gradient(90deg, #00eaff 0%, #0055ff 100%);
@@ -1039,6 +1083,14 @@ if menu == "Dashboard":
     with col_der:
         if not st.session_state.is_admin:
             st.subheader("Mi Pick (5° lugar)")
+            st.markdown("""
+            <style>
+            .mi-pick-center { display:flex; flex-direction:column; align-items:center; }
+            @media (max-width: 768px) {
+                .mi-pick-center { align-items: center; text-align: center; }
+            }
+            </style>
+            """, unsafe_allow_html=True)
 
             if not proxima:
                 st.info("No hay próxima carrera disponible para hacer pick.")
@@ -1075,7 +1127,6 @@ if menu == "Dashboard":
                     if img_path:
                         st.image(img_path, width=180)
 
-                    # Tarjeta grande con el pick actual (nombre + código + escudería)
                     st.markdown(f"""
                     <div style="
                         background:#222;
@@ -1179,30 +1230,113 @@ if menu == "Dashboard":
         ]
         user_color = {u: palette[i % len(palette)] for i, u in enumerate(usernames)}
 
+        # Mapas foto y escudería desde usuarios_puntos
+        import base64 as _b64_st
+
+        def _mime_from_b64(b64str: str) -> str:
+            """Detecta el MIME type real a partir de los primeros bytes del base64."""
+            if not b64str:
+                return "image/jpeg"
+            h = b64str[:12]
+            if h.startswith("/9j/"):
+                return "image/jpeg"
+            if h.startswith("iVBOR"):
+                return "image/png"
+            if h.startswith("UklGR"):
+                return "image/webp"
+            if h.startswith("R0lG"):
+                return "image/gif"
+            return "image/jpeg"  # fallback
+
+        _foto_map_st = {}
+        _esc_map_st = {}
+        if not usuarios_puntos.empty:
+            if "foto_perfil" in usuarios_puntos.columns:
+                _foto_map_st = dict(zip(usuarios_puntos["username"], usuarios_puntos["foto_perfil"].fillna("")))
+            if "escuderia" in usuarios_puntos.columns:
+                _esc_map_st = dict(zip(usuarios_puntos["username"], usuarios_puntos["escuderia"].fillna("")))
+
+        def _build_foto_url(uname):
+            fp = _foto_map_st.get(uname, "")
+            if fp:
+                return f"data:{_mime_from_b64(fp)};base64,{fp}"
+            esc = _esc_map_st.get(uname, uname)
+            ini = (esc or uname or "?")[0].upper()
+            svg = (
+                f'<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64">'
+                f'<circle cx="32" cy="32" r="32" fill="#2e3140"/>'
+                f'<text x="32" y="44" text-anchor="middle" font-size="28" '
+                f'font-family="Arial" font-weight="bold" fill="#00eaff">{ini}</text></svg>'
+            )
+            return "data:image/svg+xml;base64," + _b64_st.b64encode(svg.encode()).decode()
+
         # Columnas de carreras (rounds)
         race_cols = [c for c in matriz.columns if isinstance(c, (int, float))]
         race_cols = sorted(race_cols)
 
-        # Orden final: color, usuario, total, carreras
-        columnas_finales = ["Usuario", "Total"] + race_cols
-        matriz_display = matriz[columnas_finales].rename(
-            columns={c: f"R{int(c)}" for c in race_cols}
-        )
-        # Columna visual de color como franja muy discreta (sin texto)
-        row_colors = [user_color[u] for u in usernames]
-        matriz_display.insert(0, "Color", "")
-        matriz_display = matriz_display.rename(columns={"Color": " "})
+        # Orden final: tabla HTML custom con fotos circulares
+        race_col_names = [f"R{int(c)}" for c in race_cols]
+        row_colors   = [user_color[u] for u in usernames]
+        row_ranks    = [f"#{r}" for r in matriz["rank"].tolist()]
+        foto_urls    = [_build_foto_url(u) for u in usernames]
+        totales_disp = matriz["Total"].tolist()
+        usuario_disp = []
+        for row in matriz.itertuples():
+            usuario_disp.append(_decorar_usuario(row._asdict() if hasattr(row, '_asdict') else {"username": row.username, "rank": row.rank}))
+        # Reconstruir nombres decorados directamente
+        usuario_disp = []
+        for i, uname in enumerate(usernames):
+            r = i + 1
+            if r == 1:   usuario_disp.append(f"{uname} 🥇👑")
+            elif r == 2: usuario_disp.append(f"{uname} 🥈")
+            elif r == 3: usuario_disp.append(f"{uname} 🥉")
+            else:        usuario_disp.append(uname)
 
-        def _colorize_columns(col):
-            if col.name == " ":
-                return [f"background-color: {c}" for c in row_colors]
-            return [""] * len(col)
+        race_values = {}
+        for rc, rc_name in zip(race_cols, race_col_names):
+            race_values[rc_name] = matriz[rc].tolist()
 
-        st.dataframe(
-            matriz_display.style.apply(_colorize_columns, axis=0),
-            use_container_width=True,
-            hide_index=True,
+        # Construir cabecera
+        th_style = "padding:6px 10px;text-align:center;color:#00eaff;font-size:0.82rem;border-bottom:1px solid #333;"
+        headers_html = (
+            f'<th style="{th_style}"></th>'
+            f'<th style="{th_style}">#</th>'
+            f'<th style="{th_style};text-align:left;">Escudería</th>'
+            f'<th style="{th_style}">Total</th>'
         )
+        for rc_name in race_col_names:
+            headers_html += f'<th style="{th_style}">{rc_name}</th>'
+
+        # Construir filas
+        rows_html = ""
+        for i in range(len(usernames)):
+            bg = "#1e2128" if i % 2 == 0 else "#23272f"
+            td = f"padding:7px 10px;text-align:center;vertical-align:middle;font-size:0.88rem;color:#ddd;"
+            img_tag = f'<img src="{foto_urls[i]}" style="width:38px;height:38px;border-radius:50%;object-fit:cover;border:2px solid #00eaff;display:block;margin:auto;"/>'
+            rank_badge = f'<span style="background:{row_colors[i]};color:#fff;font-weight:800;padding:2px 8px;border-radius:8px;font-size:0.85rem;">{row_ranks[i]}</span>'
+            user_cell = f'<td style="{td};text-align:left;">{usuario_disp[i]}</td>'
+            total_cell = f'<td style="{td};font-weight:700;color:#00eaff;">{int(totales_disp[i])}</td>'
+            race_cells = "".join(
+                f'<td style="{td}">{int(race_values[rc_name][i])}</td>'
+                for rc_name in race_col_names
+            )
+            rows_html += (
+                f'<tr style="background:{bg};">'
+                f'<td style="{td};">{img_tag}</td>'
+                f'<td style="{td};">{rank_badge}</td>'
+                f'{user_cell}{total_cell}{race_cells}'
+                f'</tr>'
+            )
+
+        standings_html = f"""
+        <div style="overflow-x:auto;">
+        <table style="width:100%;border-collapse:collapse;font-family:sans-serif;">
+          <thead><tr style="background:#16181e;">{headers_html}</tr></thead>
+          <tbody>{rows_html}</tbody>
+        </table>
+        </div>
+        """
+        st.markdown(standings_html, unsafe_allow_html=True)
 
         # Gráfica de líneas usando puntos acumulados por round, con eje Y >= 0
         pivot_chart = (
@@ -1218,6 +1352,11 @@ if menu == "Dashboard":
         )
 
         max_y = float(chart_df["PuntosAcum"].max() or 0)
+
+        # Agregar punto de origen (round 0, PuntosAcum 0) para que las líneas parte del origen
+        import pandas as _pd_orig
+        _origin_rows = [{"round": 0, "Usuario": u, "PuntosAcum": 0} for u in chart_df["Usuario"].unique()]
+        chart_df = _pd_orig.concat([_pd_orig.DataFrame(_origin_rows), chart_df], ignore_index=True)
 
         chart = (
             alt.Chart(chart_df)
@@ -1281,40 +1420,75 @@ if menu == "Dashboard":
         else:
             st.caption("Aún no hay resultados registrados.")
 
-    # Lista nominal de jugadores con foto de perfil y puntos
-    st.markdown("### 🏎️ Jugadores")
-    if not usuarios_puntos.empty:
-        import base64 as _b64_nom
-        _cols_nom = st.columns(min(len(usuarios_puntos), 4))
-        for _idx, _urow in enumerate(usuarios_puntos.itertuples()):
-            with _cols_nom[_idx % len(_cols_nom)]:
+
+# =========================
+# ESCUDERÍAS
+# =========================
+elif menu == "Escuderías":
+    st.title("🏎️ Escuderías")
+    temporada = crud.obtener_temporada_activa()
+    if temporada:
+        _upts_esc = crud.listar_usuarios_con_puntos(temporada["id"])
+    else:
+        import pandas as _pd_esc
+        _upts_esc = _pd_esc.DataFrame()
+    if _upts_esc.empty:
+        st.info("Aún no hay jugadores registrados.")
+    else:
+        import base64 as _b64_esc
+
+        def _mime_from_b64_esc(b64str: str) -> str:
+            if not b64str:
+                return "image/jpeg"
+            h = b64str[:12]
+            if h.startswith("/9j/"):
+                return "image/jpeg"
+            if h.startswith("iVBOR"):
+                return "image/png"
+            if h.startswith("UklGR"):
+                return "image/webp"
+            if h.startswith("R0lG"):
+                return "image/gif"
+            return "image/jpeg"
+
+        _upts_esc = _upts_esc.sort_values("total_puntos", ascending=False).reset_index(drop=True)
+        _N_COLS_ESC = 3
+        _cols_esc = st.columns(_N_COLS_ESC)
+        for _idx, _urow in enumerate(_upts_esc.itertuples()):
+            with _cols_esc[_idx % _N_COLS_ESC]:
                 _esc = (_urow.escuderia or _urow.username or "?")
                 _fp  = _urow.foto_perfil or ""
+                _rank_nom = _idx + 1
+                _rank_badge = {1: "🥇", 2: "🥈", 3: "🥉"}.get(_rank_nom, f"#{_rank_nom}")
                 if _fp:
-                    _src = f"data:image/jpeg;base64,{_fp}"
+                    _src = f"data:{_mime_from_b64_esc(_fp)};base64,{_fp}"
                 else:
                     _ini = _esc[0].upper()
                     _svg = (
-                        f'<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64">'
-                        f'<circle cx="32" cy="32" r="32" fill="#2e3140"/>'
-                        f'<text x="32" y="44" text-anchor="middle" font-size="28" '
+                        f'<svg xmlns="http://www.w3.org/2000/svg" width="80" height="80">'
+                        f'<circle cx="40" cy="40" r="40" fill="#2e3140"/>'
+                        f'<text x="40" y="55" text-anchor="middle" font-size="36" '
                         f'font-family="Arial" font-weight="bold" fill="#00eaff">{_ini}</text></svg>'
                     )
-                    _src = "data:image/svg+xml;base64," + _b64_nom.b64encode(_svg.encode()).decode()
+                    _src = "data:image/svg+xml;base64," + _b64_esc.b64encode(_svg.encode()).decode()
                 st.markdown(
                     f"""
-                    <div style="text-align:center;background:#23272f;border-radius:14px;
-                                padding:14px 8px;border:1.5px solid #00eaff22;margin-bottom:8px;">
-                        <img src="{_src}" style="width:64px;height:64px;border-radius:50%;
-                                    object-fit:cover;border:2px solid #00eaff;margin-bottom:8px;"/>
-                        <div style="font-weight:700;color:#fff;font-size:0.9rem;white-space:nowrap;
-                                    overflow:hidden;text-overflow:ellipsis;">{_esc}</div>
-                        <div style="color:#00eaff;font-size:1.1rem;font-weight:800;">{int(_urow.total_puntos)} pts</div>
+                    <div style="text-align:center;background:#23272f;border-radius:16px;
+                                padding:18px 10px 14px 10px;border:1.5px solid #00eaff33;
+                                margin-bottom:10px;position:relative;">
+                        <div style="position:absolute;top:8px;left:10px;font-size:0.9rem;
+                                    font-weight:800;color:#fff;">{_rank_badge}</div>
+                        <img src="{_src}" style="width:72px;height:72px;border-radius:50%;
+                                    object-fit:cover;border:2.5px solid #00eaff;
+                                    margin-bottom:8px;box-shadow:0 0 12px #00eaff44;"/>
+                        <div style="font-weight:700;color:#fff;font-size:0.95rem;white-space:nowrap;
+                                    overflow:hidden;text-overflow:ellipsis;padding:0 6px;">{_esc}</div>
+                        <div style="color:#00eaff;font-size:1.1rem;font-weight:800;margin-top:2px;">{int(_urow.total_puntos)} pts</div>
                     </div>
                     """,
                     unsafe_allow_html=True,
                 )
-   
+
 # =========================
 # MI PICK
 # =========================
@@ -1650,33 +1824,61 @@ elif menu == "Carreras":
 elif menu == "Race View":
     st.title("📊 Race View — picks históricos")
 
+    # Asegurar que auto_piloto_id esté sincronizado antes de mostrar resaltados
+    crud.sincronizar_auto_picks_temporada(temporada_id)
+
     historial_all = crud.historial_picks_temporada(temporada_id)
 
     if historial_all.empty:
         st.info("Aún no hay picks registrados en esta temporada.")
     else:
-        df_all = historial_all[["username", "round", "piloto_codigo"]].copy()
+        df_all = historial_all[["username", "round", "piloto_codigo", "auto_asignado"]].copy()
 
-        matriz = (
+        # Pivot de códigos de piloto
+        matriz_cod = (
             df_all
-            .pivot_table(
-                index="username",
-                columns="round",
-                values="piloto_codigo",
-                aggfunc="first",
-                fill_value="",
-            )
+            .pivot_table(index="username", columns="round", values="piloto_codigo", aggfunc="first", fill_value="")
+            .sort_index(axis=1)
+        )
+        # Pivot de flag auto_asignado
+        matriz_auto = (
+            df_all
+            .pivot_table(index="username", columns="round", values="auto_asignado", aggfunc="first", fill_value=0)
             .sort_index(axis=1)
         )
 
-        matriz = matriz.reset_index()
-        matriz = matriz.rename(columns={"username": "Usuario"})
+        all_users = sorted(df_all["username"].unique())
+        round_cols_sorted = sorted([c for c in matriz_cod.columns if isinstance(c, (int, float))])
 
-        round_cols = [c for c in matriz.columns if isinstance(c, (int, float))]
-        rename_map = {c: f"R{int(c)}" for c in round_cols}
-        matriz = matriz.rename(columns=rename_map)
+        # Render como tabla HTML; resaltar celdas donde auto_asignado=1
+        th = "padding:6px 10px;text-align:center;color:#00eaff;font-size:0.82rem;border-bottom:1px solid #333;background:#16181e;"
+        header_html = f'<th style="{th};text-align:left;">Escudería</th>'
+        for rc in round_cols_sorted:
+            header_html += f'<th style="{th}">R{int(rc)}</th>'
 
-        st.dataframe(matriz, use_container_width=True, hide_index=True)
+        rows_html = ""
+        for i, usuario in enumerate(all_users):
+            bg = "#1e2128" if i % 2 == 0 else "#23272f"
+            td_base = "padding:6px 10px;text-align:center;font-size:0.88rem;vertical-align:middle;"
+            cells = f'<td style="{td_base};text-align:left;color:#fff;font-weight:600;">{usuario}</td>'
+            for rc in round_cols_sorted:
+                val = matriz_cod.loc[usuario, rc] if usuario in matriz_cod.index and rc in matriz_cod.columns else ""
+                es_auto = int(matriz_auto.loc[usuario, rc]) if usuario in matriz_auto.index and rc in matriz_auto.columns else 0
+                if es_auto:
+                    cell_style = f"{td_base};background:#2a1a00;color:#ffaa00;font-style:italic;"
+                    cells += f'<td style="{cell_style}" title="No eligió — auto-asignado">{val}</td>'
+                else:
+                    cells += f'<td style="{td_base};color:#ddd;">{val}</td>'
+            rows_html += f'<tr style="background:{bg};">{cells}</tr>'
+
+        st.markdown(f"""
+        <div style="overflow-x:auto;">
+        <table style="width:100%;border-collapse:collapse;font-family:sans-serif;">
+          <thead><tr>{header_html}</tr></thead>
+          <tbody>{rows_html}</tbody>
+        </table>
+        </div>
+        """, unsafe_allow_html=True)
 
 # =========================
 # BONOS

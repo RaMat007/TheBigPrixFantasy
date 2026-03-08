@@ -427,10 +427,12 @@ def guardar_pick(usuario_id, carrera_id, piloto_id):
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     cur.execute("""
         INSERT INTO picks
-        (usuario_id, carrera_id, piloto_id, timestamp)
-        VALUES (%s, %s, %s, %s)
+        (usuario_id, carrera_id, piloto_id, timestamp, auto_asignado)
+        VALUES (%s, %s, %s, %s, 0)
         ON CONFLICT (usuario_id, carrera_id)
-        DO UPDATE SET piloto_id = EXCLUDED.piloto_id, timestamp = EXCLUDED.timestamp
+        DO UPDATE SET piloto_id = EXCLUDED.piloto_id,
+                      timestamp = EXCLUDED.timestamp,
+                      auto_asignado = 0
     """, (usuario_id, carrera_id, piloto_id, datetime.now().isoformat()))
     conn.commit()
     conn.close()
@@ -472,19 +474,23 @@ def pick_designado(carrera_id, piloto_id):
     return count > 0
 
 def top_picks_global(temporada_id, limit=10):
+    """Top pilotos más pickeados en carreras que ya se jugaron (tienen al menos un resultado)."""
     conn = get_connection()
     df = pd.read_sql_query("""
         SELECT
             pl.codigo AS piloto_codigo,
             pl.nombre AS piloto_nombre,
-            COALESCE(COUNT(p.id), 0) AS pick_count
+            COUNT(p.id) AS pick_count
         FROM pilotos pl
-        LEFT JOIN picks p 
+        LEFT JOIN picks p
             ON p.piloto_id = pl.id
         LEFT JOIN carreras c
             ON c.id = p.carrera_id
-            AND c.temporada_id = %s
-        GROUP BY pl.id
+           AND c.temporada_id = %s
+        WHERE c.id IS NULL OR EXISTS (
+            SELECT 1 FROM resultados r WHERE r.carrera_id = c.id
+        )
+        GROUP BY pl.id, pl.codigo, pl.nombre
         ORDER BY pick_count DESC, pl.nombre ASC
         LIMIT %s
     """, conn, params=(temporada_id, limit))
@@ -580,6 +586,24 @@ def historial_picks_usuario(usuario_id, temporada_id):
     return df
 
 
+def auto_pilotos_por_temporada(temporada_id: int) -> dict:
+    """Devuelve {round: piloto_codigo} para las carreras con auto_piloto_id asignado."""
+    conn = get_connection()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cur.execute(
+        """
+        SELECT c.round, pl.codigo
+        FROM carreras c
+        JOIN pilotos pl ON pl.id = c.auto_piloto_id
+        WHERE c.temporada_id = %s AND c.auto_piloto_id IS NOT NULL
+        """,
+        (temporada_id,),
+    )
+    result = {row["round"]: row["codigo"] for row in cur.fetchall()}
+    conn.close()
+    return result
+
+
 def historial_picks_temporada(temporada_id):
     """Historial de picks por carrera para todos los usuarios (no-admin) en una temporada."""
     conn = get_connection()
@@ -593,7 +617,8 @@ def historial_picks_temporada(temporada_id):
             pl.codigo AS piloto_codigo,
             pl.nombre AS piloto_nombre,
             r.posicion AS posicion_real,
-            COALESCE(pt.puntos, 0) AS puntos
+            COALESCE(pt.puntos, 0) AS puntos,
+            COALESCE(p.auto_asignado, 0) AS auto_asignado
         FROM picks p
         JOIN usuarios u ON u.id = p.usuario_id AND u.is_admin = 0
         JOIN carreras c ON c.id = p.carrera_id
@@ -920,24 +945,104 @@ def mejores_carreras_temporada(temporada_id, limit=10):
     return df
 
 
-def auto_asignar_picks_faltantes(carrera_id: int, primer_piloto_id: int):
-    """Para todos los usuarios no-admin sin pick en esta carrera, asigna primer_piloto_id."""
+def set_auto_piloto_carrera(carrera_id: int, piloto_id: int):
+    """Permite que el admin marque manualmente el piloto auto-asignado de una carrera."""
     conn = get_connection()
     cur = conn.cursor()
     cur.execute(
+        "UPDATE carreras SET auto_piloto_id = %s WHERE id = %s",
+        (piloto_id, carrera_id),
+    )
+    conn.commit()
+    conn.close()
+
+
+def sincronizar_auto_picks_temporada(temporada_id: int):
+    """
+    Asigna auto_piloto_id SOLO a la próxima carrera pendiente (sin resultados y sin marca).
+    El piloto se elige al azar evitando los ya usados en carreras anteriores.
+    Es idempotente: si ya tiene auto_piloto_id asignado, no hace nada.
+    Las carreras pasadas sin marca se dejan vacías (el admin las marca manualmente).
+    """
+    import random
+    conn = get_connection()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+
+    # Sólo asignar a la próxima carrera pendiente sin auto_piloto_id
+    cur.execute(
         """
-        INSERT INTO picks (usuario_id, carrera_id, piloto_id, timestamp)
-        SELECT u.id, %s, %s, %s
-        FROM usuarios u
+        SELECT c.id FROM carreras c
+        WHERE c.temporada_id = %s AND c.auto_piloto_id IS NULL
+          AND NOT EXISTS (SELECT 1 FROM resultados r WHERE r.carrera_id = c.id)
+        ORDER BY c.round ASC LIMIT 1
+        """,
+        (temporada_id,),
+    )
+    proxima_row = cur.fetchone()
+    if proxima_row:
+        proxima_cid = proxima_row["id"]
+        # Solo excluir pilotos ya usados como auto-pick en otras carreras de la temporada
+        cur.execute(
+            "SELECT auto_piloto_id FROM carreras WHERE temporada_id = %s AND auto_piloto_id IS NOT NULL",
+            (temporada_id,),
+        )
+        usados = {r["auto_piloto_id"] for r in cur.fetchall()}
+        cur.execute("SELECT id FROM pilotos ORDER BY id")
+        todos = [r["id"] for r in cur.fetchall()]
+        disponibles = [p for p in todos if p not in usados] or todos
+        auto_piloto = random.choice(disponibles)
+        cur.execute(
+            "UPDATE carreras SET auto_piloto_id = %s WHERE id = %s",
+            (auto_piloto, proxima_cid),
+        )
+
+    conn.commit()
+    conn.close()
+
+
+def auto_asignar_picks_faltantes(carrera_id: int, primer_piloto_id: int):
+    """
+    Asigna el piloto auto-asignado (guardado en carreras.auto_piloto_id) a todos
+    los usuarios no-admin que no tienen pick en esta carrera.
+    """
+    conn = get_connection()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+
+    # Obtener el auto_piloto_id ya calculado por sincronizar_auto_picks_temporada
+    cur.execute("SELECT auto_piloto_id FROM carreras WHERE id = %s", (carrera_id,))
+    row = cur.fetchone()
+    auto_piloto = row["auto_piloto_id"] if row else None
+
+    if not auto_piloto:
+        conn.close()
+        return
+
+    # Usuarios sin pick en esta carrera
+    cur.execute(
+        """
+        SELECT u.id FROM usuarios u
         WHERE u.is_admin = 0
           AND NOT EXISTS (
               SELECT 1 FROM picks p
               WHERE p.usuario_id = u.id AND p.carrera_id = %s
           )
-        ON CONFLICT (usuario_id, carrera_id) DO NOTHING
+        ORDER BY u.id
         """,
-        (carrera_id, primer_piloto_id, datetime.now().isoformat(), carrera_id),
+        (carrera_id,),
     )
+    usuarios_sin_pick = [r["id"] for r in cur.fetchall()]
+
+    now = datetime.now().isoformat()
+    for uid in usuarios_sin_pick:
+        cur.execute(
+            """
+            INSERT INTO picks (usuario_id, carrera_id, piloto_id, timestamp, auto_asignado)
+            VALUES (%s, %s, %s, %s, 1)
+            ON CONFLICT (usuario_id, carrera_id) DO NOTHING
+            """,
+            (uid, carrera_id, auto_piloto, now),
+        )
+
     conn.commit()
     conn.close()
 
