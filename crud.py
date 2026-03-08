@@ -6,6 +6,7 @@ import psycopg2.extras
 import rules
 import time
 import f1db_integration
+import streamlit as st
 
 from logger import get_logger
 log = get_logger()
@@ -604,6 +605,7 @@ def auto_pilotos_por_temporada(temporada_id: int) -> dict:
     return result
 
 
+@st.cache_data(ttl=60)
 def historial_picks_temporada(temporada_id):
     """Historial de picks por carrera para todos los usuarios (no-admin) en una temporada."""
     conn = get_connection()
@@ -1047,6 +1049,7 @@ def auto_asignar_picks_faltantes(carrera_id: int, primer_piloto_id: int):
     conn.close()
 
 
+@st.cache_data(ttl=60)
 def listar_usuarios_con_puntos(temporada_id: int):
     """Devuelve todos los usuarios no-admin con sus puntos totales en la temporada (0 si no hay)."""
     conn = get_connection()

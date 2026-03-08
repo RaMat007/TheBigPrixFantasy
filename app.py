@@ -914,12 +914,13 @@ if menu == "Dashboard":
 
     proxima = crud.obtener_proxima_carrera(temporada_id)
 
-    # Sincronizar auto_piloto_id en todas las carreras (pasadas y próxima)
-    crud.sincronizar_auto_picks_temporada(temporada_id)
-
-    # Auto-asignar pick por defecto a usuarios sin pick en la próxima carrera
-    if proxima and not carrera_bloqueada(proxima["inicio"]):
-        crud.auto_asignar_picks_faltantes(proxima["id"], 0)
+    # Sincronizar y auto-asignar solo una vez por sesión (evita lag en cada rerun)
+    _sync_key = f"sync_done_{temporada_id}"
+    if not st.session_state.get(_sync_key):
+        crud.sincronizar_auto_picks_temporada(temporada_id)
+        if proxima and not carrera_bloqueada(proxima["inicio"]):
+            crud.auto_asignar_picks_faltantes(proxima["id"], 0)
+        st.session_state[_sync_key] = True
 
     col_izq, col_der = st.columns(2)
 
@@ -1824,8 +1825,11 @@ elif menu == "Carreras":
 elif menu == "Race View":
     st.title("📊 Race View — picks históricos")
 
-    # Asegurar que auto_piloto_id esté sincronizado antes de mostrar resaltados
-    crud.sincronizar_auto_picks_temporada(temporada_id)
+    # Sincronizar solo si no se hizo ya en esta sesión
+    _sync_key = f"sync_done_{temporada_id}"
+    if not st.session_state.get(_sync_key):
+        crud.sincronizar_auto_picks_temporada(temporada_id)
+        st.session_state[_sync_key] = True
 
     historial_all = crud.historial_picks_temporada(temporada_id)
 
