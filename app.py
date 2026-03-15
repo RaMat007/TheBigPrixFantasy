@@ -1201,14 +1201,38 @@ if menu == "Dashboard":
             .sort_index(axis=1)
         )
 
-        totales = progreso.groupby("username")["puntos"].sum()
+        totales = progreso.groupby("username")['puntos'].sum()
         matriz.insert(0, "Total", totales)
         matriz = matriz.sort_values("Total", ascending=False)
-
-        # Añadir ranking y decorar nombres con corona/medallas
-        matriz = matriz.reset_index()  # username pasa a columna
+        matriz = matriz.reset_index()
         matriz["rank"] = matriz.index + 1
 
+        # Calcular ranking anterior (ronda previa)
+        race_cols = [c for c in matriz.columns if isinstance(c, (int, float))]
+        race_cols = sorted(race_cols)
+        if len(race_cols) > 0:
+            last_round = race_cols[-1]
+            prev_round = race_cols[-2] if len(race_cols) > 1 else None
+        else:
+            last_round = prev_round = None
+
+        # Ranking actual (por totales)
+        usernames = matriz["username"].tolist()
+        curr_ranking = {u: i+1 for i, u in enumerate(usernames)}
+
+        # Ranking anterior: sumar puntos solo hasta prev_round
+        prev_ranking = {}
+        if prev_round is not None:
+            matriz_prev = matriz.set_index("username")
+            prev_totals = (matriz_prev[race_cols]
+                .loc[:, [c for c in race_cols if c <= prev_round]]
+                .sum(axis=1)
+            )
+            prev_sorted = prev_totals.sort_values(ascending=False)
+            for i, u in enumerate(prev_sorted.index):
+                prev_ranking[u] = i+1
+
+        # Decorar nombres
         def _decorar_usuario(row):
             nombre = row["username"]
             r = row["rank"]
@@ -1219,12 +1243,9 @@ if menu == "Dashboard":
             if r == 3:
                 return f"{nombre} 🥉"
             return nombre
-
         matriz["Usuario"] = matriz.apply(_decorar_usuario, axis=1)
 
         # Asignar un color fijo por usuario (para tabla y gráfica)
-        usernames = matriz["username"].tolist()
-
         palette = [
             "#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd",
             "#8c564b", "#e377c2", "#7f7f7f", "#bcbd22", "#17becf",
@@ -1233,9 +1254,7 @@ if menu == "Dashboard":
 
         # Mapas foto y escudería desde usuarios_puntos
         import base64 as _b64_st
-
         def _mime_from_b64(b64str: str) -> str:
-            """Detecta el MIME type real a partir de los primeros bytes del base64."""
             if not b64str:
                 return "image/jpeg"
             h = b64str[:12]
@@ -1247,8 +1266,7 @@ if menu == "Dashboard":
                 return "image/webp"
             if h.startswith("R0lG"):
                 return "image/gif"
-            return "image/jpeg"  # fallback
-
+            return "image/jpeg"
         _foto_map_st = {}
         _esc_map_st = {}
         if not usuarios_puntos.empty:
@@ -1256,7 +1274,6 @@ if menu == "Dashboard":
                 _foto_map_st = dict(zip(usuarios_puntos["username"], usuarios_puntos["foto_perfil"].fillna("")))
             if "escuderia" in usuarios_puntos.columns:
                 _esc_map_st = dict(zip(usuarios_puntos["username"], usuarios_puntos["escuderia"].fillna("")))
-
         def _build_foto_url(uname):
             fp = _foto_map_st.get(uname, "")
             if fp:
@@ -1271,10 +1288,6 @@ if menu == "Dashboard":
             )
             return "data:image/svg+xml;base64," + _b64_st.b64encode(svg.encode()).decode()
 
-        # Columnas de carreras (rounds)
-        race_cols = [c for c in matriz.columns if isinstance(c, (int, float))]
-        race_cols = sorted(race_cols)
-
         # Orden final: tabla HTML custom con fotos circulares
         race_col_names = [f"R{int(c)}" for c in race_cols]
         row_colors   = [user_color[u] for u in usernames]
@@ -1284,7 +1297,6 @@ if menu == "Dashboard":
         usuario_disp = []
         for row in matriz.itertuples():
             usuario_disp.append(_decorar_usuario(row._asdict() if hasattr(row, '_asdict') else {"username": row.username, "rank": row.rank}))
-        # Reconstruir nombres decorados directamente
         usuario_disp = []
         for i, uname in enumerate(usernames):
             r = i + 1
@@ -1299,9 +1311,11 @@ if menu == "Dashboard":
 
         # Construir cabecera
         th_style = "padding:6px 10px;text-align:center;color:#00eaff;font-size:0.82rem;border-bottom:1px solid #333;"
+        th_narrow = th_style + "min-width:32px;max-width:38px;width:1%;padding-left:2px;padding-right:2px;"
         headers_html = (
             f'<th style="{th_style}"></th>'
-            f'<th style="{th_style}">#</th>'
+            f'<th style="{th_narrow}">#</th>'
+            f'<th style="{th_narrow}">Δ Pos</th>'
             f'<th style="{th_style};text-align:left;">Escudería</th>'
             f'<th style="{th_style}">Total</th>'
         )
@@ -1314,17 +1328,33 @@ if menu == "Dashboard":
             bg = "#1e2128" if i % 2 == 0 else "#23272f"
             td = f"padding:7px 10px;text-align:center;vertical-align:middle;font-size:0.88rem;color:#ddd;"
             img_tag = f'<img src="{foto_urls[i]}" style="width:38px;height:38px;border-radius:50%;object-fit:cover;border:2px solid #00eaff;display:block;margin:auto;"/>'
-            rank_badge = f'<span style="background:{row_colors[i]};color:#fff;font-weight:800;padding:2px 8px;border-radius:8px;font-size:0.85rem;">{row_ranks[i]}</span>'
+            uname = usernames[i]
+            curr_rank = curr_ranking.get(uname, None)
+            prev_rank = prev_ranking.get(uname, None) if prev_round is not None else None
+            # Indicador de cambio de posición (columna separada)
+            if prev_rank is not None and curr_rank is not None:
+                diff = prev_rank - curr_rank
+                if diff > 0:
+                    arrow = f'<span style="color:#00ff55;font-size:1.1em;vertical-align:middle;">▲</span> <span style="color:#00ff55;font-size:0.95em;">{diff}</span>'
+                elif diff < 0:
+                    arrow = f'<span style="color:#ff4444;font-size:1.1em;vertical-align:middle;">▼</span> <span style="color:#ff4444;font-size:0.95em;">{abs(diff)}</span>'
+                else:
+                    arrow = f'<span style="color:#aaa;font-size:1.1em;vertical-align:middle;">●</span>'
+            else:
+                arrow = ""
+            rank_badge = f'<span style="background:{row_colors[i]};color:#fff;font-weight:800;padding:2px 7px;border-radius:8px;font-size:0.85rem;">{row_ranks[i]}</span>'
             user_cell = f'<td style="{td};text-align:left;">{usuario_disp[i]}</td>'
             total_cell = f'<td style="{td};font-weight:700;color:#00eaff;">{int(totales_disp[i])}</td>'
             race_cells = "".join(
                 f'<td style="{td}">{int(race_values[rc_name][i])}</td>'
                 for rc_name in race_col_names
             )
+            td_narrow = td + "min-width:32px;max-width:38px;width:1%;padding-left:2px;padding-right:2px;"
             rows_html += (
                 f'<tr style="background:{bg};">'
                 f'<td style="{td};">{img_tag}</td>'
-                f'<td style="{td};">{rank_badge}</td>'
+                f'<td style="{td_narrow}">{rank_badge}</td>'
+                f'<td style="{td_narrow}">{arrow}</td>'
                 f'{user_cell}{total_cell}{race_cells}'
                 f'</tr>'
             )
