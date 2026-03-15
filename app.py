@@ -1311,7 +1311,7 @@ if menu == "Dashboard":
 
         # Construir cabecera
         th_style = "padding:6px 10px;text-align:center;color:#00eaff;font-size:0.82rem;border-bottom:1px solid #333;"
-        th_narrow = th_style + "min-width:32px;max-width:38px;width:1%;padding-left:2px;padding-right:2px;"
+        th_narrow = th_style + "min-width:44px;max-width:54px;width:1%;padding-left:2px;padding-right:2px;"
         headers_html = (
             f'<th style="{th_style}"></th>'
             f'<th style="{th_narrow}">#</th>'
@@ -1349,7 +1349,7 @@ if menu == "Dashboard":
                 f'<td style="{td}">{int(race_values[rc_name][i])}</td>'
                 for rc_name in race_col_names
             )
-            td_narrow = td + "min-width:32px;max-width:38px;width:1%;padding-left:2px;padding-right:2px;"
+            td_narrow = td + "min-width:44px;max-width:54px;width:1%;padding-left:2px;padding-right:2px;"
             rows_html += (
                 f'<tr style="background:{bg};">'
                 f'<td style="{td};">{img_tag}</td>'
