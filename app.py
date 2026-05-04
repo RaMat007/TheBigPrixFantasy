@@ -1491,16 +1491,15 @@ if menu == "Dashboard":
                                   color='#aaaaaa', fontsize=8)
 
             for uname in usernames:
-                udf = progreso[progreso['username'] == uname].sort_values('round')
-                xs = [0] + udf['round'].tolist()
-                ys = [0] + udf['puntos_acum'].tolist()
+                udf = chart_df[chart_df['Usuario'] == uname].sort_values('round')
+                xs = udf['round'].tolist()
+                ys = udf['PuntosAcum'].tolist()
                 ax_c.plot(xs, ys, color=user_color[uname], marker='o',
                           linewidth=2.2, markersize=5, label=uname,
                           markerfacecolor=user_color[uname], markeredgewidth=0)
-                # etiqueta final
                 if ys:
                     ax_c.annotate(
-                        f"{uname} ({ys[-1]})",
+                        f"{uname} ({int(ys[-1])})",
                         xy=(xs[-1], ys[-1]),
                         xytext=(5, 0), textcoords='offset points',
                         color=user_color[uname], fontsize=7.5, va='center',
