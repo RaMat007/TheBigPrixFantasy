@@ -1501,19 +1501,51 @@ if menu == "Dashboard":
             ax_c.set_ylim(bottom=0)
             ax_c.grid(axis='y', color='#2a2d38', alpha=0.7, linewidth=0.8)
 
-            _mat_idx = matriz.set_index('username')
+            # Usar exactamente la misma fuente de datos que Altair: chart_df
+            # chart_df contiene filas (round, Usuario, PuntosAcum) y ya incluye el origen (round=0)
+            try:
+                _chart = chart_df.copy()
+            except NameError:
+                # En caso de que chart_df no esté en scope por alguna razón, reconstruirlo
+                _pivot = (
+                    progreso
+                    .pivot(index="round", columns="username", values="puntos_acum")
+                    .sort_index()
+                )
+                _chart = (
+                    _pivot
+                    .reset_index()
+                    .melt(id_vars=["round"], var_name="Usuario", value_name="PuntosAcum")
+                )
+                import pandas as _pd_tmp
+                _origin_rows = [{"round": 0, "Usuario": u, "PuntosAcum": 0} for u in _chart["Usuario"].unique()]
+                _chart = _pd_tmp.concat([_pd_tmp.DataFrame(_origin_rows), _chart], ignore_index=True)
+
+            # asegurar orden por round
+            _chart = _chart.sort_values(["Usuario", "round"]).reset_index(drop=True)
+            rounds = sorted(_chart['round'].unique())
+            max_y = float(_chart['PuntosAcum'].max() or 0)
+
             for uname in usernames:
-                xs, ys, acum = [0], [0], 0
-                for rc in race_cols:
-                    acum += int(_mat_idx.loc[uname, rc])
-                    xs.append(int(rc))
-                    ys.append(acum)
-                ax_c.plot(xs, ys, color=user_color[uname], marker='o',
-                          linewidth=2, markersize=4, label=uname)
+                udf = _chart[_chart['Usuario'] == uname].sort_values('round')
+                xs = list(udf['round'])
+                ys = list(udf['PuntosAcum'])
+                if len(xs) == 0:
+                    continue
+                ax_c.plot(xs, ys, color=user_color.get(uname, '#888888'), marker='o',
+                          linewidth=2.2, markersize=4, label=uname)
+                # etiqueta final con entero
+                ax_c.annotate(f"{uname} ({int(ys[-1])})",
+                              xy=(xs[-1], ys[-1]), xytext=(6, 0), textcoords='offset points',
+                              color=user_color.get(uname, '#dddddd'), fontsize=7.5, va='center')
+
+            # fijar ticks y límites coherentes con Altair
+            ax_c.set_xticks(rounds)
+            ax_c.set_xticklabels([f"R{int(r)}" for r in rounds], color='#aaaaaa', fontsize=8)
+            ax_c.set_ylim(0, max_y + max(1, int(max_y * 0.05)))
 
             ax_c.legend(loc='upper left', fontsize=8, framealpha=0.3,
-                        facecolor=BG2, edgecolor='#444',
-                        labelcolor='#ddd', ncol=2)
+                        facecolor=BG2, edgecolor='#444', labelcolor='#ddd', ncol=2)
 
             buf = _io_jpg.BytesIO()
             _mplt.savefig(buf, format='jpeg', dpi=150,
