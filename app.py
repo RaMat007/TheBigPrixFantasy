@@ -1456,7 +1456,8 @@ if menu == "Dashboard":
                 elif c == 2: cell.set_text_props(color=CYAN, fontweight='bold')
                 else:        cell.set_text_props(color='#ddd')
 
-            # ── Gráfica: puntos_acum por round (de progreso) ───────────
+            # ── Gráfica: acumulado por round desde matriz ───────────────
+            # race_cols ya está calculado arriba: lista de rounds ordenada
             ax_c = fig.add_subplot(gs[1])
             ax_c.set_facecolor(BG2)
             for sp in ax_c.spines.values(): sp.set_color('#333')
@@ -1468,10 +1469,13 @@ if menu == "Dashboard":
             ax_c.set_ylim(bottom=0)
             ax_c.grid(axis='y', color='#2a2d38', alpha=0.7, linewidth=0.8)
 
+            _mat_idx = matriz.set_index('username')
             for uname in usernames:
-                udf = progreso[progreso['username'] == uname].sort_values('round')
-                xs = [0] + list(udf['round'])
-                ys = [0] + list(udf['puntos_acum'])
+                xs, ys, acum = [0], [0], 0
+                for rc in race_cols:
+                    acum += int(_mat_idx.loc[uname, rc])
+                    xs.append(int(rc))
+                    ys.append(acum)
                 ax_c.plot(xs, ys, color=user_color[uname], marker='o',
                           linewidth=2, markersize=4, label=uname)
 
