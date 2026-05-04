@@ -1471,7 +1471,7 @@ if menu == "Dashboard":
                 else:
                     cell.set_text_props(color='#dddddd')
 
-            # ── GRÁFICA: acumulado por round directo de progreso ───────
+            # ── GRÁFICA: acumulado por round ───────────────────────────
             ax_c = fig.add_subplot(gs[1])
             ax_c.set_facecolor(BG2)
             for spine in ax_c.spines.values():
@@ -1485,25 +1485,27 @@ if menu == "Dashboard":
             ax_c.grid(axis='y', color='#2a2d38', alpha=0.7, linewidth=0.8)
             ax_c.grid(axis='x', color='#2a2d38', alpha=0.4, linewidth=0.5)
 
-            all_rounds = sorted(progreso['round'].unique())
-            ax_c.set_xticks(all_rounds)
-            ax_c.set_xticklabels([f"R{int(r)}" for r in all_rounds],
-                                  color='#aaaaaa', fontsize=8)
-
             for uname in usernames:
-                udf = chart_df[chart_df['Usuario'] == uname].sort_values('round')
-                xs = udf['round'].tolist()
-                ys = udf['PuntosAcum'].tolist()
+                udf = (progreso[progreso['username'] == uname]
+                       .sort_values('round'))
+                xs = [0] + udf['round'].tolist()
+                ys = [0] + udf['puntos_acum'].tolist()
                 ax_c.plot(xs, ys, color=user_color[uname], marker='o',
                           linewidth=2.2, markersize=5, label=uname,
                           markerfacecolor=user_color[uname], markeredgewidth=0)
-                if ys:
+                if len(xs) > 0:
                     ax_c.annotate(
                         f"{uname} ({int(ys[-1])})",
                         xy=(xs[-1], ys[-1]),
                         xytext=(5, 0), textcoords='offset points',
                         color=user_color[uname], fontsize=7.5, va='center',
                     )
+
+            # fijar ticks DESPUÉS de graficar para que el autoscale ya ocurrió
+            all_rounds = sorted(progreso['round'].unique())
+            ax_c.set_xticks([0] + all_rounds)
+            ax_c.set_xticklabels(['0'] + [f"R{int(r)}" for r in all_rounds],
+                                  color='#aaaaaa', fontsize=8)
 
             ax_c.legend(loc='upper left', fontsize=7.5, framealpha=0.3,
                         facecolor=BG2, edgecolor='#444', labelcolor='#dddddd',
