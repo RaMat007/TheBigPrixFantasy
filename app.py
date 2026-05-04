@@ -1421,44 +1421,76 @@ if menu == "Dashboard":
         def _generar_jpg_standings():
             import io as _io_jpg
             import matplotlib.pyplot as _mplt
-            import matplotlib.gridspec as _mgs
+            import matplotlib.patches as _pat
 
             BG, BG2, CYAN = '#16181e', '#1e2128', '#00eaff'
             n = len(usernames)
 
-            fig = _mplt.figure(figsize=(10, 2.5 + n * 0.55 + 4.5), facecolor=BG)
-            gs  = _mgs.GridSpec(2, 1, figure=fig, hspace=0.5,
-                                height_ratios=[2.5 + n * 0.55, 4.5])
+            ROW_H   = 0.48          # pulgadas por fila
+            TABLE_H = ROW_H * (n + 1.5)
+            CHART_H = 4.5
+            FIG_W   = 8.0
 
-            # ── Tabla: Pos / Usuario / Puntos ──────────────────────────
-            ax_t = fig.add_subplot(gs[0])
-            ax_t.set_facecolor(BG); ax_t.axis('off')
-            ax_t.set_title('Standings General', color=CYAN,
-                           fontsize=14, fontweight='bold', pad=10)
-
-            rows, rcolors = [], []
-            for i, uname in enumerate(usernames):
-                medal = {0:'🥇', 1:'🥈', 2:'🥉'}.get(i, '')
-                rows.append([f"#{i+1} {medal}", uname, str(int(totales_disp[i]))])
-                bg = BG2 if i % 2 == 0 else '#23272f'
-                rcolors.append([user_color[uname], bg, '#1a2535'])
-
-            tbl = ax_t.table(
-                cellText=rows, colLabels=['Pos', 'Usuario', 'Puntos'],
-                colWidths=[0.2, 0.55, 0.25], cellLoc='center', loc='center',
-                cellColours=rcolors, colColours=['#0a0c12']*3,
+            fig, (ax_t, ax_c) = _mplt.subplots(
+                2, 1, facecolor=BG,
+                figsize=(FIG_W, TABLE_H + CHART_H + 0.8),
+                gridspec_kw={'height_ratios': [TABLE_H, CHART_H], 'hspace': 0.55}
             )
-            tbl.auto_set_font_size(False); tbl.set_fontsize(11); tbl.scale(1, 2.0)
-            for (r, c), cell in tbl.get_celld().items():
-                cell.set_edgecolor('#2a2d38')
-                if r == 0:   cell.set_text_props(color=CYAN, fontweight='bold')
-                elif c == 0: cell.set_text_props(color='#fff', fontweight='bold')
-                elif c == 2: cell.set_text_props(color=CYAN, fontweight='bold')
-                else:        cell.set_text_props(color='#ddd')
 
-            # ── Gráfica: acumulado por round desde matriz ───────────────
-            # race_cols ya está calculado arriba: lista de rounds ordenada
-            ax_c = fig.add_subplot(gs[1])
+            # ── TABLA MANUAL ───────────────────────────────────────────
+            ax_t.set_facecolor(BG)
+            ax_t.set_xlim(0, 1)
+            ax_t.set_ylim(0, 1)
+            ax_t.axis('off')
+            ax_t.set_title('Standings General', color=CYAN,
+                           fontsize=13, fontweight='bold', pad=8)
+
+            total_rows = n + 1           # 1 header + n datos
+            rh = 1.0 / total_rows        # altura normalizada por fila
+
+            # columnas: x_inicio, ancho, alineación
+            cols_def = [
+                (0.00, 0.14, 'center'),  # Pos
+                (0.14, 0.62, 'left'),    # Usuario
+                (0.76, 0.24, 'center'),  # Puntos
+            ]
+            headers = ['Pos', 'Usuario', 'Puntos']
+
+            # cabecera
+            for (x, w, align), label in zip(cols_def, headers):
+                ax_t.add_patch(_pat.Rectangle(
+                    (x, 1 - rh), w, rh, transform=ax_t.transAxes,
+                    facecolor='#0a0c12', edgecolor='#333', linewidth=0.8, clip_on=False
+                ))
+                tx = x + 0.01 if align == 'left' else x + w / 2
+                ha = align
+                ax_t.text(tx, 1 - rh / 2, label, color=CYAN, fontweight='bold',
+                          fontsize=9.5, ha=ha, va='center',
+                          transform=ax_t.transAxes)
+
+            # filas de datos
+            for i, uname in enumerate(usernames):
+                y0  = 1 - rh * (i + 2)
+                bg  = BG2 if i % 2 == 0 else '#23272f'
+                pos_str = f"#{i+1}"
+                vals = [pos_str, uname, str(int(totales_disp[i]))]
+                bgs  = [user_color[uname], bg, bg]
+                fgs  = ['#ffffff', '#dddddd', CYAN]
+                fws  = ['bold', 'normal', 'bold']
+
+                for (x, w, align), val, cbg, cfg, cfw in zip(cols_def, vals, bgs, fgs, fws):
+                    ax_t.add_patch(_pat.Rectangle(
+                        (x, y0), w, rh, transform=ax_t.transAxes,
+                        facecolor=cbg, edgecolor='#2a2d38', linewidth=0.5, clip_on=False
+                    ))
+                    pad   = 0.01 if align == 'left' else 0.0
+                    tx    = x + pad + (0 if align == 'left' else w / 2)
+                    ha    = 'left' if align == 'left' else 'center'
+                    ax_t.text(tx, y0 + rh / 2, val, color=cfg, fontweight=cfw,
+                              fontsize=9, ha=ha, va='center',
+                              transform=ax_t.transAxes)
+
+            # ── GRÁFICA: acumulado por round ───────────────────────────
             ax_c.set_facecolor(BG2)
             for sp in ax_c.spines.values(): sp.set_color('#333')
             ax_c.tick_params(colors='#aaa')
