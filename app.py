@@ -1417,118 +1417,40 @@ if menu == "Dashboard":
 
         st.altair_chart(chart, use_container_width=True)
 
-        # ─── EXPORTAR JPG STANDINGS ─────────────────────────────────────
-        def _generar_jpg_standings():
-            import io as _io_jpg
-            import matplotlib.pyplot as _mplt
-            import matplotlib.gridspec as _mgs
-
-            n_users = len(usernames)
-            BG    = '#16181e'
-            BG2   = '#1e2128'
-            CYAN  = '#00eaff'
-
-            fig = _mplt.figure(figsize=(9, 3.2 + n_users * 0.38 + 4.2), facecolor=BG)
-            gs  = _mgs.GridSpec(2, 1, figure=fig, hspace=0.45,
-                                height_ratios=[3.2 + n_users * 0.38, 4.2])
-
-            # ── TABLA SIMPLE: Pos | Usuario | Total ────────────────────
-            ax_t = fig.add_subplot(gs[0])
-            ax_t.set_facecolor(BG)
-            ax_t.axis('off')
-            ax_t.set_title('Standings General', color=CYAN,
-                           fontsize=13, fontweight='bold', pad=10)
-
-            cell_text   = []
-            cell_colors = []
-            for i, uname in enumerate(usernames):
-                medals = {1: '🥇', 2: '🥈', 3: '🥉'}
-                pos_str = f"#{i+1} {medals.get(i+1, '')}"
-                cell_text.append([pos_str, uname, str(int(totales_disp[i]))])
-                bg = BG2 if i % 2 == 0 else '#23272f'
-                cell_colors.append([user_color[uname], bg, '#1a2535'])
-
-            tbl = ax_t.table(
-                cellText=cell_text,
-                colLabels=['Pos', 'Usuario', 'Puntos'],
-                colWidths=[0.22, 0.52, 0.26],
-                cellLoc='center',
-                loc='center',
-                cellColours=cell_colors,
-                colColours=['#0a0c12'] * 3,
-            )
-            tbl.auto_set_font_size(False)
-            tbl.set_fontsize(10)
-            tbl.scale(1, 1.8)
-            for (row, col), cell in tbl.get_celld().items():
-                cell.set_edgecolor('#2a2d38')
-                if row == 0:
-                    cell.set_text_props(color=CYAN, fontweight='bold')
-                elif col == 0:
-                    cell.set_text_props(color='#ffffff', fontweight='bold')
-                elif col == 2:
-                    cell.set_text_props(color=CYAN, fontweight='bold')
-                else:
-                    cell.set_text_props(color='#dddddd')
-
-            # ── GRÁFICA: acumulado por round ───────────────────────────
-            ax_c = fig.add_subplot(gs[1])
-            ax_c.set_facecolor(BG2)
-            for spine in ax_c.spines.values():
-                spine.set_color('#333333')
-            ax_c.tick_params(colors='#aaaaaa', which='both')
-            ax_c.set_title('Evolución de Puntos Acumulados', color=CYAN,
-                           fontsize=11, fontweight='bold')
-            ax_c.set_xlabel('Round', color='#aaaaaa', fontsize=9)
-            ax_c.set_ylabel('Puntos acumulados', color='#aaaaaa', fontsize=9)
-            ax_c.set_ylim(bottom=0)
-            ax_c.grid(axis='y', color='#2a2d38', alpha=0.7, linewidth=0.8)
-            ax_c.grid(axis='x', color='#2a2d38', alpha=0.4, linewidth=0.5)
-
-            for uname in usernames:
-                udf = (progreso[progreso['username'] == uname]
-                       .sort_values('round'))
-                xs = [0] + udf['round'].tolist()
-                ys = [0] + udf['puntos_acum'].tolist()
-                ax_c.plot(xs, ys, color=user_color[uname], marker='o',
-                          linewidth=2.2, markersize=5, label=uname,
-                          markerfacecolor=user_color[uname], markeredgewidth=0)
-                if len(xs) > 0:
-                    ax_c.annotate(
-                        f"{uname} ({int(ys[-1])})",
-                        xy=(xs[-1], ys[-1]),
-                        xytext=(5, 0), textcoords='offset points',
-                        color=user_color[uname], fontsize=7.5, va='center',
-                    )
-
-            # fijar ticks DESPUÉS de graficar para que el autoscale ya ocurrió
-            all_rounds = sorted(progreso['round'].unique())
-            ax_c.set_xticks([0] + all_rounds)
-            ax_c.set_xticklabels(['0'] + [f"R{int(r)}" for r in all_rounds],
-                                  color='#aaaaaa', fontsize=8)
-
-            ax_c.legend(loc='upper left', fontsize=7.5, framealpha=0.3,
-                        facecolor=BG2, edgecolor='#444', labelcolor='#dddddd',
-                        ncol=2)
-
-            buf = _io_jpg.BytesIO()
-            _mplt.savefig(buf, format='jpeg', dpi=150,
-                          bbox_inches='tight', facecolor=BG)
-            _mplt.close(fig)
-            buf.seek(0)
-            return buf.getvalue()
-
-        _exp_col, _ = st.columns([1, 5])
-        with _exp_col:
-            if st.button("📸 Exportar JPG", key="btn_export_jpg_standings"):
-                _jpg_bytes = _generar_jpg_standings()
-                st.download_button(
-                    label="⬇️ Descargar standings.jpg",
-                    data=_jpg_bytes,
-                    file_name="standings_f1.jpg",
-                    mime="image/jpeg",
-                    key="dl_standings_jpg",
-                )
+        # ─── EXPORTAR JPG: screenshot de lo que ya está en pantalla ────
+        import streamlit.components.v1 as _stc
+        _stc.html("""
+        <script src="https://html2canvas.hertzen.com/dist/html2canvas.min.js"></script>
+        <style>
+          .ss-btn {
+            background:#00eaff; color:#16181e; border:none;
+            padding:8px 20px; border-radius:6px; font-size:14px;
+            font-weight:bold; cursor:pointer; font-family:sans-serif;
+          }
+          .ss-btn:hover { background:#00bcd4; }
+        </style>
+        <button class="ss-btn" onclick="captureStandings()">📸 Exportar JPG</button>
+        <script>
+        function captureStandings() {
+          var root = window.parent ? window.parent.document.body : document.body;
+          html2canvas(root, {
+            backgroundColor: '#16181e',
+            scale: 2,
+            useCORS: true,
+            logging: false
+          }).then(function(canvas) {
+            canvas.toBlob(function(blob) {
+              var url = URL.createObjectURL(blob);
+              var a = window.parent ? window.parent.document.createElement('a') : document.createElement('a');
+              a.href = url;
+              a.download = 'standings_f1.jpg';
+              a.click();
+              URL.revokeObjectURL(url);
+            }, 'image/jpeg', 0.93);
+          });
+        }
+        </script>
+        """, height=55)
         # ────────────────────────────────────────────────────────────────
 
     else:
