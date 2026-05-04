@@ -1424,114 +1424,95 @@ if menu == "Dashboard":
             import matplotlib.gridspec as _mgs
 
             n_users = len(usernames)
-            n_rcols = len(race_col_names)
-            fig_w = max(12.0, 4.5 + n_rcols * 1.05)
-            row_h_in = 0.42
-            table_h = row_h_in * (n_users + 1.8)
-            chart_h = 4.2
+            BG    = '#16181e'
+            BG2   = '#1e2128'
+            CYAN  = '#00eaff'
 
-            fig = _mplt.figure(
-                figsize=(fig_w, table_h + chart_h + 0.8),
-                facecolor='#16181e',
-            )
-            gs = _mgs.GridSpec(
-                2, 1, figure=fig, hspace=0.38,
-                height_ratios=[table_h, chart_h],
-            )
+            fig = _mplt.figure(figsize=(9, 3.2 + n_users * 0.38 + 4.2), facecolor=BG)
+            gs  = _mgs.GridSpec(2, 1, figure=fig, hspace=0.45,
+                                height_ratios=[3.2 + n_users * 0.38, 4.2])
 
-            # ── TABLA ──────────────────────────────────────────────────
+            # ── TABLA SIMPLE: Pos | Usuario | Total ────────────────────
             ax_t = fig.add_subplot(gs[0])
-            ax_t.set_facecolor('#16181e')
+            ax_t.set_facecolor(BG)
             ax_t.axis('off')
-            ax_t.set_title('Standings General', color='#00eaff',
-                           fontsize=13, fontweight='bold', pad=8)
+            ax_t.set_title('Standings General', color=CYAN,
+                           fontsize=13, fontweight='bold', pad=10)
 
-            col_labels = ['Pos', 'Delta', 'Usuario', 'Total'] + race_col_names
-            cell_text = []
-            cell_colors_mat = []
-
+            cell_text   = []
+            cell_colors = []
             for i, uname in enumerate(usernames):
-                cur_r = curr_ranking.get(uname)
-                prv_r = prev_ranking.get(uname) if prev_round is not None else None
-                if prv_r is not None and cur_r is not None:
-                    diff = prv_r - cur_r
-                    delta_str = (f"+{diff}" if diff > 0
-                                 else (str(diff) if diff < 0 else "="))
-                else:
-                    delta_str = "-"
-
-                row_vals = [f"#{i+1}", delta_str, uname, int(totales_disp[i])]
-                for rc in race_col_names:
-                    row_vals.append(int(race_values[rc][i]))
-                cell_text.append(row_vals)
-
-                bg = '#1e2128' if i % 2 == 0 else '#23272f'
-                row_c = [user_color[uname], bg, bg, '#1a2535'] + [bg] * n_rcols
-                cell_colors_mat.append(row_c)
-
-            hdr_colors = ['#0a0c12'] * len(col_labels)
+                medals = {1: '🥇', 2: '🥈', 3: '🥉'}
+                pos_str = f"#{i+1} {medals.get(i+1, '')}"
+                cell_text.append([pos_str, uname, str(int(totales_disp[i]))])
+                bg = BG2 if i % 2 == 0 else '#23272f'
+                cell_colors.append([user_color[uname], bg, '#1a2535'])
 
             tbl = ax_t.table(
                 cellText=cell_text,
-                colLabels=col_labels,
+                colLabels=['Pos', 'Usuario', 'Puntos'],
+                colWidths=[0.22, 0.52, 0.26],
                 cellLoc='center',
                 loc='center',
-                cellColours=cell_colors_mat,
-                colColours=hdr_colors,
+                cellColours=cell_colors,
+                colColours=['#0a0c12'] * 3,
             )
             tbl.auto_set_font_size(False)
-            tbl.set_fontsize(8.5)
-            tbl.scale(1, 1.5)
-
+            tbl.set_fontsize(10)
+            tbl.scale(1, 1.8)
             for (row, col), cell in tbl.get_celld().items():
                 cell.set_edgecolor('#2a2d38')
-                txt = cell.get_text().get_text()
                 if row == 0:
-                    cell.set_text_props(color='#00eaff', fontweight='bold')
+                    cell.set_text_props(color=CYAN, fontweight='bold')
                 elif col == 0:
                     cell.set_text_props(color='#ffffff', fontweight='bold')
-                elif col == 3:
-                    cell.set_text_props(color='#00eaff', fontweight='bold')
-                elif col == 1:
-                    if txt.startswith('+'):
-                        cell.set_text_props(color='#00ff55')
-                    elif txt.startswith('-') and txt != '-':
-                        cell.set_text_props(color='#ff4444')
-                    else:
-                        cell.set_text_props(color='#aaaaaa')
+                elif col == 2:
+                    cell.set_text_props(color=CYAN, fontweight='bold')
                 else:
                     cell.set_text_props(color='#dddddd')
 
-            # ── GRÁFICA ───────────────────────────────────────────────
+            # ── GRÁFICA: acumulado por round directo de progreso ───────
             ax_c = fig.add_subplot(gs[1])
-            ax_c.set_facecolor('#1e2128')
+            ax_c.set_facecolor(BG2)
             for spine in ax_c.spines.values():
                 spine.set_color('#333333')
             ax_c.tick_params(colors='#aaaaaa', which='both')
-            ax_c.set_title('Evolucion de Puntos', color='#00eaff',
+            ax_c.set_title('Evolución de Puntos Acumulados', color=CYAN,
                            fontsize=11, fontweight='bold')
             ax_c.set_xlabel('Round', color='#aaaaaa', fontsize=9)
             ax_c.set_ylabel('Puntos acumulados', color='#aaaaaa', fontsize=9)
             ax_c.set_ylim(bottom=0)
             ax_c.grid(axis='y', color='#2a2d38', alpha=0.7, linewidth=0.8)
+            ax_c.grid(axis='x', color='#2a2d38', alpha=0.4, linewidth=0.5)
+
+            all_rounds = sorted(progreso['round'].unique())
+            ax_c.set_xticks(all_rounds)
+            ax_c.set_xticklabels([f"R{int(r)}" for r in all_rounds],
+                                  color='#aaaaaa', fontsize=8)
 
             for uname in usernames:
-                udf = chart_df[chart_df['Usuario'] == uname].sort_values('round')
-                ax_c.plot(
-                    udf['round'], udf['PuntosAcum'],
-                    color=user_color[uname], marker='o',
-                    linewidth=2.0, markersize=4, label=uname,
-                )
+                udf = progreso[progreso['username'] == uname].sort_values('round')
+                xs = [0] + udf['round'].tolist()
+                ys = [0] + udf['puntos_acum'].tolist()
+                ax_c.plot(xs, ys, color=user_color[uname], marker='o',
+                          linewidth=2.2, markersize=5, label=uname,
+                          markerfacecolor=user_color[uname], markeredgewidth=0)
+                # etiqueta final
+                if ys:
+                    ax_c.annotate(
+                        f"{uname} ({ys[-1]})",
+                        xy=(xs[-1], ys[-1]),
+                        xytext=(5, 0), textcoords='offset points',
+                        color=user_color[uname], fontsize=7.5, va='center',
+                    )
 
-            ax_c.legend(
-                loc='upper left', fontsize=7.5, framealpha=0.25,
-                facecolor='#1e2128', edgecolor='#444',
-                labelcolor='#dddddd',
-            )
+            ax_c.legend(loc='upper left', fontsize=7.5, framealpha=0.3,
+                        facecolor=BG2, edgecolor='#444', labelcolor='#dddddd',
+                        ncol=2)
 
             buf = _io_jpg.BytesIO()
             _mplt.savefig(buf, format='jpeg', dpi=150,
-                          bbox_inches='tight', facecolor='#16181e')
+                          bbox_inches='tight', facecolor=BG)
             _mplt.close(fig)
             buf.seek(0)
             return buf.getvalue()
