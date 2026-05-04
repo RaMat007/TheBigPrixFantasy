@@ -1432,16 +1432,32 @@ if menu == "Dashboard":
         <button class="ss-btn" onclick="captureStandings()">📸 Exportar JPG</button>
         <script>
         function captureStandings() {
-          var root = window.parent ? window.parent.document.body : document.body;
+          var doc = window.parent ? window.parent.document : document;
+          var win = window.parent ? window.parent : window;
+          var root = doc.body;
+          var fullH = Math.max(root.scrollHeight, root.offsetHeight, doc.documentElement.scrollHeight);
+          var fullW = Math.max(root.scrollWidth,  root.offsetWidth,  doc.documentElement.scrollWidth);
+          var origScrollY = win.scrollY;
+          win.scrollTo(0, 0);
           html2canvas(root, {
             backgroundColor: '#16181e',
             scale: 2,
             useCORS: true,
-            logging: false
+            allowTaint: true,
+            logging: false,
+            height: fullH,
+            width: fullW,
+            windowHeight: fullH,
+            windowWidth: fullW,
+            scrollY: 0,
+            scrollX: 0,
+            y: 0,
+            x: 0
           }).then(function(canvas) {
+            win.scrollTo(0, origScrollY);
             canvas.toBlob(function(blob) {
               var url = URL.createObjectURL(blob);
-              var a = window.parent ? window.parent.document.createElement('a') : document.createElement('a');
+              var a = doc.createElement('a');
               a.href = url;
               a.download = 'standings_f1.jpg';
               a.click();
