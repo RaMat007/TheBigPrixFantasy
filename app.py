@@ -2042,8 +2042,13 @@ elif menu == "Race View":
         ) if not df_all.empty else pd.DataFrame()
 
         all_users = sorted(df_all["username"].unique()) if not df_all.empty else []
-        # Usar TODAS las carreras pasadas como columnas, no solo las que tienen picks
-        round_cols_sorted = rounds_todos if rounds_todos else sorted([c for c in matriz_cod.columns if isinstance(c, (int, float))])
+        # Mostrar todas las carreras pasadas y además las rondas para las que existen picks
+        cols_from_matriz = [c for c in matriz_cod.columns if isinstance(c, (int, float))]
+        if rounds_todos:
+            # union de rondas pasadas + rondas que tienen picks (por si hay picks para próximas carreras)
+            round_cols_sorted = sorted(set(rounds_todos) | set(cols_from_matriz))
+        else:
+            round_cols_sorted = sorted(cols_from_matriz)
 
         # Render como tabla HTML; resaltar celdas donde auto_asignado=1
         th = "padding:6px 10px;text-align:center;color:#00eaff;font-size:0.82rem;border-bottom:1px solid #333;background:#16181e;"
