@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 import json
+import ssl
 import time
 from datetime import datetime, timezone
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
+
+import certifi
 
 
 API_BASE = "https://api.openf1.org/v1"
@@ -21,11 +24,12 @@ class OpenF1Error(RuntimeError):
 
 def _get_json(endpoint: str, **params):
     url = f"{API_BASE}/{endpoint}?{urlencode(params)}"
+    ssl_context = ssl.create_default_context(cafile=certifi.where())
     last_error = None
     for attempt in range(1, MAX_ATTEMPTS + 1):
         request = Request(url, headers={"User-Agent": "TheBigPrixFantasy/1.0"})
         try:
-            with urlopen(request, timeout=TIMEOUT_SECONDS) as response:
+            with urlopen(request, timeout=TIMEOUT_SECONDS, context=ssl_context) as response:
                 return json.loads(response.read().decode("utf-8"))
         except HTTPError as exc:
             last_error = exc
