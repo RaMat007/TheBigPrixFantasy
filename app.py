@@ -351,8 +351,8 @@ if "user_id" not in st.session_state:
     tab_login, tab_registro, tab_reset = st.tabs(["Iniciar sesión", "Crear cuenta", "Restablecer contraseña"])
 
     with tab_login:
-        username = st.text_input("Usuario", key="login_user")
-        password = st.text_input("Contraseña", type="password", key="login_pass")
+        username = st.text_input("Usuario", key="login_user", autocomplete="username")
+        password = st.text_input("Contraseña", type="password", key="login_pass", autocomplete="current-password")
         if st.button("Entrar", key="btn_login"):
             user = validar_login(username, password)
             if user:
@@ -1426,7 +1426,7 @@ if menu == "Dashboard":
                 import base64
                 layout_bytes = layout_buf.getvalue()
                 layout_b64 = base64.b64encode(layout_bytes).decode('utf-8')
-                img_html = f"<img src='data:image/png;base64,{layout_b64}' width='110' style='display:block;margin:auto;border-radius:8px;'/>"
+                img_html = f"<img src='data:image/png;base64,{layout_b64}' width='110' style='display:block;margin:auto;border-radius:8px;'/>")
             else:
                 img_html = "<span style='color:#888;font-size:0.9rem;'>Sin layout</span>"
             st.markdown(f"""
@@ -2304,12 +2304,12 @@ elif menu == "Carreras":
             layout_key = pista_norm if pista_norm in _CIRCUIT_LAYOUTS else _cal_normaliza(_cal_equiv.get(pista_norm, ""))
 
             if img_path is not None:
-                img_html = f"<img src='file:///{img_path}' width='110' style='display:block;margin:auto;border-radius:6px;'/>"
+                img_html = f"<img src='file:///{img_path}' width='110' style='display:block;margin:auto;border-radius:6px;'/>")
             elif layout_key in _CIRCUIT_LAYOUTS:
                 coords = _CIRCUIT_LAYOUTS[layout_key]
                 buf = _plot_layout_icon(coords, width=110, height=110)
                 b64 = base64.b64encode(buf.getvalue()).decode('utf-8')
-                img_html = f"<img src='data:image/png;base64,{b64}' width='110' style='display:block;margin:auto;border-radius:6px;'/>"
+                img_html = f"<img src='data:image/png;base64,{b64}' width='110' style='display:block;margin:auto;border-radius:6px;'/>")
             else:
                 img_html = "<span style='color:#888;font-size:0.85rem;'>Sin layout</span>"
 
