@@ -1,15 +1,23 @@
 import streamlit as st
-from datetime import datetime, time, timezone
+from datetime import datetime, time, timezone, timedelta
 from pathlib import Path
 import html
 import pandas as pd
 import altair as alt
+import extra_streamlit_components as stx
 from logger import get_logger
 import crud
 import f1db_integration
 import openf1_integration
 from rules import calcular_puntos, carrera_bloqueada
-from auth import validar_login, verificar_correo, actualizar_password, get_usuario_by_id
+from auth import (
+    actualizar_password,
+    crear_token_sesion,
+    get_usuario_by_id,
+    validar_login,
+    validar_token_sesion,
+    verificar_correo,
+)
 from db import init_db
 # --- Para layouts de pista ---
 import json
@@ -286,6 +294,37 @@ st.set_page_config(page_title="Quiniela F1", layout="wide")
 
 _load_css()
 
+AUTH_COOKIE_NAME = "tbpf_session"
+AUTH_COOKIE_HOURS = 12
+cookie_manager = stx.CookieManager(key="tbpf_cookie_manager")
+
+
+def _cargar_usuario_en_sesion(user):
+    st.session_state.user_id = user["id"]
+    st.session_state.username = user["username"]
+    st.session_state.is_admin = user["is_admin"]
+    st.session_state.escuderia = user.get("escuderia", "")
+    st.session_state.foto_perfil = user.get("foto_perfil", "")
+
+
+def _recordar_usuario(user_id: int):
+    token = crear_token_sesion(user_id)
+    cookie_manager.set(
+        AUTH_COOKIE_NAME,
+        token,
+        key=f"tbpf_cookie_set_{user_id}",
+        expires_at=datetime.now(timezone.utc) + timedelta(hours=AUTH_COOKIE_HOURS),
+        secure=str(st.context.url).startswith("https://"),
+        same_site="strict",
+    )
+
+
+if "user_id" not in st.session_state:
+    _token_recordado = cookie_manager.get(AUTH_COOKIE_NAME)
+    _usuario_recordado = validar_token_sesion(_token_recordado) if _token_recordado else None
+    if _usuario_recordado:
+        _cargar_usuario_en_sesion(_usuario_recordado)
+
 
 # =========================
 # LOGIN
@@ -301,11 +340,8 @@ if "user_id" not in st.session_state:
         if st.button("Entrar", key="btn_login"):
             user = validar_login(username, password)
             if user:
-                st.session_state.user_id = user["id"]
-                st.session_state.username = user["username"]
-                st.session_state.is_admin = user["is_admin"]
-                st.session_state.escuderia = user.get("escuderia", "")
-                st.session_state.foto_perfil = user.get("foto_perfil", "")
+                _cargar_usuario_en_sesion(user)
+                _recordar_usuario(user["id"])
                 st.rerun()
             else:
                 st.error("Credenciales incorrectas")
@@ -407,6 +443,8 @@ if "escuderia" not in st.session_state or "foto_perfil" not in st.session_state:
 st.sidebar.success(f"Usuario: {st.session_state.username}")
 
 if st.sidebar.button("Cerrar sesión"):
+    if cookie_manager.get(AUTH_COOKIE_NAME):
+        cookie_manager.delete(AUTH_COOKIE_NAME, key="tbpf_cookie_delete")
     st.session_state.clear()
     st.rerun()
 
