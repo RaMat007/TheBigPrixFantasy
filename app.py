@@ -295,6 +295,7 @@ st.set_page_config(page_title="Quiniela F1", layout="wide")
 _load_css()
 
 AUTH_COOKIE_NAME = "tbpf_session"
+AUTH_QUERY_PARAM = "sesion"
 AUTH_COOKIE_HOURS = 12
 cookie_manager = stx.CookieManager(key="tbpf_cookie_manager")
 
@@ -308,7 +309,8 @@ def _cargar_usuario_en_sesion(user):
 
 
 def _recordar_usuario(user_id: int):
-    token = crear_token_sesion(user_id)
+    cliente = st.context.headers.get("User-Agent", "")
+    token = crear_token_sesion(user_id, cliente)
     cookie_manager.set(
         AUTH_COOKIE_NAME,
         token,
@@ -317,15 +319,27 @@ def _recordar_usuario(user_id: int):
         secure=str(st.context.url).startswith("https://"),
         same_site="strict",
     )
+    # Respaldo compatible con Safari: el token firmado permanece en la URL
+    # durante su vigencia si el navegador rechaza la escritura del cookie.
+    st.query_params[AUTH_QUERY_PARAM] = token
 
 
 if "user_id" not in st.session_state and not st.session_state.get("_logout_pending"):
     # La lectura nativa está disponible desde la primera petición y evita
     # depender del ciclo asíncrono del componente, especialmente en Safari.
-    _token_recordado = st.context.cookies.get(AUTH_COOKIE_NAME)
-    _usuario_recordado = validar_token_sesion(_token_recordado) if _token_recordado else None
+    _token_cookie = st.context.cookies.get(AUTH_COOKIE_NAME)
+    _token_url = st.query_params.get(AUTH_QUERY_PARAM)
+    _token_recordado = _token_cookie or _token_url
+    _cliente_actual = st.context.headers.get("User-Agent", "")
+    _usuario_recordado = (
+        validar_token_sesion(_token_recordado, _cliente_actual)
+        if _token_recordado else None
+    )
     if _usuario_recordado:
         _cargar_usuario_en_sesion(_usuario_recordado)
+    elif _token_url:
+        # Retira de la dirección un token vencido, inválido o de otro navegador.
+        del st.query_params[AUTH_QUERY_PARAM]
 
 
 # =========================
@@ -453,6 +467,8 @@ if st.sidebar.button("Cerrar sesión"):
     st.session_state["_logout_pending"] = True
     if st.context.cookies.get(AUTH_COOKIE_NAME):
         cookie_manager.delete(AUTH_COOKIE_NAME, key="tbpf_cookie_delete")
+    if AUTH_QUERY_PARAM in st.query_params:
+        del st.query_params[AUTH_QUERY_PARAM]
     for _auth_key in ("user_id", "username", "is_admin", "escuderia", "foto_perfil"):
         st.session_state.pop(_auth_key, None)
     # Igual que en el login, permitimos que Safari procese primero el borrado.
