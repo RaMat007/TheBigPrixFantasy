@@ -99,9 +99,15 @@ def init_db():
         codigo TEXT UNIQUE NOT NULL,
         nombre TEXT NOT NULL,
         escuderia TEXT,
+        foto_url TEXT,
+        color_escuderia TEXT,
         activo INTEGER DEFAULT 1
     )
     """)
+
+    # Datos visuales obtenidos de OpenF1. No modifican picks históricos.
+    cur.execute("ALTER TABLE pilotos ADD COLUMN IF NOT EXISTS foto_url TEXT")
+    cur.execute("ALTER TABLE pilotos ADD COLUMN IF NOT EXISTS color_escuderia TEXT")
 
     cur.execute("""
     CREATE TABLE IF NOT EXISTS picks (

@@ -1,7 +1,52 @@
 # auth.py
 from db import get_connection
 import hashlib
+import os
 import psycopg2.extras
+import streamlit as st
+from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
+
+
+SESSION_TOKEN_MAX_AGE = 12 * 60 * 60
+SESSION_TOKEN_SALT = "thebigprixfantasy-browser-session-v1"
+
+
+def _session_secret() -> str:
+    """Obtiene una llave privada estable sin exponerla al navegador."""
+    configured = os.environ.get("AUTH_COOKIE_SECRET", "")
+    database_url = os.environ.get("DATABASE_URL", "")
+    try:
+        configured = str(st.secrets.get("AUTH_COOKIE_SECRET", configured) or configured)
+        database_url = str(st.secrets.get("DATABASE_URL", database_url) or database_url)
+    except Exception:
+        pass
+
+    if configured:
+        return configured
+    if not database_url:
+        raise RuntimeError("No hay una llave disponible para firmar la sesión.")
+    return hashlib.sha256(f"tbpf:{database_url}".encode()).hexdigest()
+
+
+def _session_serializer() -> URLSafeTimedSerializer:
+    return URLSafeTimedSerializer(_session_secret(), salt=SESSION_TOKEN_SALT)
+
+
+def crear_token_sesion(user_id: int) -> str:
+    """Crea un token firmado; nunca guarda usuario o contraseña en texto plano."""
+    return _session_serializer().dumps({"uid": int(user_id)})
+
+
+def validar_token_sesion(token: str):
+    """Valida el token recordado y vuelve a consultar al usuario en la base."""
+    if not token:
+        return None
+    try:
+        payload = _session_serializer().loads(token, max_age=SESSION_TOKEN_MAX_AGE)
+        user_id = int(payload["uid"])
+    except (BadSignature, SignatureExpired, KeyError, TypeError, ValueError):
+        return None
+    return get_usuario_by_id(user_id)
 
 def hash_password(password: str) -> str:
     return hashlib.sha256(password.encode()).hexdigest()

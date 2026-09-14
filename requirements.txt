@@ -4,3 +4,5 @@ altair
 matplotlib
 psycopg2-binary
 certifi
+extra-streamlit-components
+itsdangerous

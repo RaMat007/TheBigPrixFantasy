@@ -1,14 +1,23 @@
 import streamlit as st
-from datetime import datetime, time, timezone
+from datetime import datetime, time, timezone, timedelta
 from pathlib import Path
+import html
 import pandas as pd
 import altair as alt
+import extra_streamlit_components as stx
 from logger import get_logger
 import crud
 import f1db_integration
 import openf1_integration
 from rules import calcular_puntos, carrera_bloqueada
-from auth import validar_login, verificar_correo, actualizar_password, get_usuario_by_id
+from auth import (
+    actualizar_password,
+    crear_token_sesion,
+    get_usuario_by_id,
+    validar_login,
+    validar_token_sesion,
+    verificar_correo,
+)
 from db import init_db
 # --- Para layouts de pista ---
 import json
@@ -66,6 +75,20 @@ BASE_DIR = Path(__file__).parent
 IMG_DIR_PISTAS = BASE_DIR / "data" / "img" / "pistas"
 IMG_DIR_PILOTOS = BASE_DIR / "data" / "img" / "pilotos"
 
+TEAM_BADGES = (
+    (("racing bulls", "rb f1", "visa cash app"), "VCARB", "6692FF"),
+    (("red bull",), "RBR", "3671C6"),
+    (("mclaren",), "MCL", "FF8000"),
+    (("mercedes",), "MER", "27F4D2"),
+    (("ferrari",), "FER", "E8002D"),
+    (("aston martin",), "AMR", "229971"),
+    (("alpine",), "ALP", "00A1E8"),
+    (("williams",), "WIL", "64C4FF"),
+    (("haas",), "HAS", "B6BABD"),
+    (("audi", "sauber"), "AUD", "F50537"),
+    (("cadillac",), "CAD", "C5A365"),
+)
+
 # Aseguramos que la base (y las nuevas columnas de carreras) estén migradas
 init_db()
 
@@ -101,6 +124,22 @@ def _get_piloto_image_path(codigo: str):
                     return str(p)
 
     return None
+
+
+def _team_badge(escuderia: str, color_api: str | None = None):
+    """Devuelve sigla y color para el escudo visual de la tarjeta."""
+    team_lower = str(escuderia or "").strip().lower()
+    badge = "TEAM"
+    fallback_color = "38DCFF"
+    for aliases, candidate_badge, candidate_color in TEAM_BADGES:
+        if any(alias in team_lower for alias in aliases):
+            badge, fallback_color = candidate_badge, candidate_color
+            break
+
+    color = str(color_api or "").strip().lstrip("#")
+    if len(color) != 6 or any(ch not in "0123456789abcdefABCDEF" for ch in color):
+        color = fallback_color
+    return badge, f"#{color.upper()}"
 
 
 def _build_carreras_view(carreras_df, year_hint=2026, include_id=False):
@@ -255,6 +294,37 @@ st.set_page_config(page_title="Quiniela F1", layout="wide")
 
 _load_css()
 
+AUTH_COOKIE_NAME = "tbpf_session"
+AUTH_COOKIE_HOURS = 12
+cookie_manager = stx.CookieManager(key="tbpf_cookie_manager")
+
+
+def _cargar_usuario_en_sesion(user):
+    st.session_state.user_id = user["id"]
+    st.session_state.username = user["username"]
+    st.session_state.is_admin = user["is_admin"]
+    st.session_state.escuderia = user.get("escuderia", "")
+    st.session_state.foto_perfil = user.get("foto_perfil", "")
+
+
+def _recordar_usuario(user_id: int):
+    token = crear_token_sesion(user_id)
+    cookie_manager.set(
+        AUTH_COOKIE_NAME,
+        token,
+        key=f"tbpf_cookie_set_{user_id}",
+        expires_at=datetime.now(timezone.utc) + timedelta(hours=AUTH_COOKIE_HOURS),
+        secure=str(st.context.url).startswith("https://"),
+        same_site="strict",
+    )
+
+
+if "user_id" not in st.session_state:
+    _token_recordado = cookie_manager.get(AUTH_COOKIE_NAME)
+    _usuario_recordado = validar_token_sesion(_token_recordado) if _token_recordado else None
+    if _usuario_recordado:
+        _cargar_usuario_en_sesion(_usuario_recordado)
+
 
 # =========================
 # LOGIN
@@ -270,11 +340,8 @@ if "user_id" not in st.session_state:
         if st.button("Entrar", key="btn_login"):
             user = validar_login(username, password)
             if user:
-                st.session_state.user_id = user["id"]
-                st.session_state.username = user["username"]
-                st.session_state.is_admin = user["is_admin"]
-                st.session_state.escuderia = user.get("escuderia", "")
-                st.session_state.foto_perfil = user.get("foto_perfil", "")
+                _cargar_usuario_en_sesion(user)
+                _recordar_usuario(user["id"])
                 st.rerun()
             else:
                 st.error("Credenciales incorrectas")
@@ -376,6 +443,8 @@ if "escuderia" not in st.session_state or "foto_perfil" not in st.session_state:
 st.sidebar.success(f"Usuario: {st.session_state.username}")
 
 if st.sidebar.button("Cerrar sesión"):
+    if cookie_manager.get(AUTH_COOKIE_NAME):
+        cookie_manager.delete(AUTH_COOKIE_NAME, key="tbpf_cookie_delete")
     st.session_state.clear()
     st.rerun()
 
@@ -452,10 +521,133 @@ if menu == "Super Admin" and st.session_state.is_admin:
 
     # Pilotos
     if admin_menu == "Pilotos":
-        st.subheader("Pilotos")
+        st.subheader("Pilotos y alineación")
 
-        pilotos = crud.listar_pilotos()
-        st.dataframe(pilotos)
+        pilotos = crud.listar_pilotos(activos_only=False)
+
+        st.markdown("#### 🏁 Actualizar alineación desde OpenF1")
+        st.caption(
+            "Consulta la sesión más reciente del GP, compara la parrilla y solo aplica cambios después de tu confirmación."
+        )
+        _carreras_alineacion = crud.listar_carreras_temporada(temporada_id)
+        if not _carreras_alineacion.empty:
+            _opciones_alineacion = {
+                f"R{row.round} — {row.nombre}": int(row.id)
+                for row in _carreras_alineacion.itertuples()
+            }
+            _labels_alineacion = list(_opciones_alineacion)
+            _ahora_iso = datetime.now(timezone.utc).isoformat()
+            _futuras = _carreras_alineacion[
+                _carreras_alineacion["inicio"].astype(str) >= _ahora_iso
+            ]
+            _index_alineacion = 0
+            if not _futuras.empty:
+                _proximo_id = int(_futuras.sort_values("inicio").iloc[0]["id"])
+                _index_alineacion = list(_opciones_alineacion.values()).index(_proximo_id)
+
+            _label_alineacion = st.selectbox(
+                "Gran Premio",
+                _labels_alineacion,
+                index=_index_alineacion,
+                key="alineacion_carrera",
+            )
+            _carrera_alineacion_id = _opciones_alineacion[_label_alineacion]
+            _carrera_alineacion = _carreras_alineacion[
+                _carreras_alineacion["id"] == _carrera_alineacion_id
+            ].iloc[0].to_dict()
+            _alineacion_key = "openf1_alineacion_preview"
+
+            if st.button("🔄 Revisar alineación", key=f"consultar_alineacion_{_carrera_alineacion_id}"):
+                try:
+                    with st.spinner("Consultando la sesión más reciente disponible..."):
+                        _alineacion_preview = openf1_integration.obtener_alineacion(_carrera_alineacion)
+                    _alineacion_preview["carrera_id"] = _carrera_alineacion_id
+                    st.session_state[_alineacion_key] = _alineacion_preview
+                except openf1_integration.OpenF1Error as exc:
+                    st.session_state.pop(_alineacion_key, None)
+                    st.error(str(exc))
+
+            _alineacion_preview = st.session_state.get(_alineacion_key)
+            if (
+                _alineacion_preview
+                and _alineacion_preview.get("carrera_id") == _carrera_alineacion_id
+            ):
+                st.success(
+                    f"Fuente: {_alineacion_preview['sesion']} · {_alineacion_preview['carrera']} "
+                    f"(sesión {_alineacion_preview['session_key']})"
+                )
+                _locales_codigo = {
+                    str(row.codigo).upper(): row for row in pilotos.itertuples()
+                }
+                _api_codigo = {
+                    row["codigo"]: row for row in _alineacion_preview["alineacion"]
+                }
+                _filas_alineacion = []
+                _hay_cambios = False
+                for codigo, row in _api_codigo.items():
+                    local = _locales_codigo.get(codigo)
+                    if local is None:
+                        estado = "Alta nueva"
+                    elif not bool(local.activo):
+                        estado = "Entra a la alineación"
+                    elif str(local.escuderia or "").strip() != row["escuderia"]:
+                        estado = f"Cambia de {local.escuderia or 'sin escudería'}"
+                    else:
+                        estado = "Sin cambio"
+                    _hay_cambios = _hay_cambios or estado != "Sin cambio"
+                    _filas_alineacion.append(
+                        {
+                            "Código": codigo,
+                            "Piloto": row["nombre"],
+                            "Escudería": row["escuderia"],
+                            "Estado": estado,
+                        }
+                    )
+
+                for codigo, local in _locales_codigo.items():
+                    if bool(local.activo) and codigo not in _api_codigo:
+                        _hay_cambios = True
+                        _filas_alineacion.append(
+                            {
+                                "Código": codigo,
+                                "Piloto": local.nombre,
+                                "Escudería": local.escuderia,
+                                "Estado": "Sale de la alineación",
+                            }
+                        )
+
+                st.dataframe(
+                    pd.DataFrame(_filas_alineacion),
+                    use_container_width=True,
+                    hide_index=True,
+                )
+                if not _hay_cambios:
+                    st.info("La alineación ya coincide. No hay cambios que aplicar.")
+                else:
+                    st.warning(
+                        "Solo cambiará qué pilotos están activos y su escudería actual. Los picks y resultados existentes no se modifican."
+                    )
+                    _confirmar_alineacion = st.checkbox(
+                        "Revisé las entradas, salidas y cambios de escudería",
+                        key=f"confirmar_alineacion_{_carrera_alineacion_id}",
+                    )
+                    if st.button(
+                        "✅ Aplicar alineación",
+                        disabled=not _confirmar_alineacion,
+                        type="primary",
+                        key=f"aplicar_alineacion_{_carrera_alineacion_id}",
+                    ):
+                        try:
+                            crud.aplicar_alineacion_pilotos(_alineacion_preview["alineacion"])
+                            st.session_state.pop(_alineacion_key, None)
+                            st.success("Alineación actualizada. Las tarjetas ya reflejan la parrilla confirmada.")
+                            st.rerun()
+                        except Exception as exc:
+                            st.error(f"No se aplicó ningún cambio: {exc}")
+
+        st.divider()
+        st.markdown("#### Catálogo completo")
+        st.dataframe(pilotos, use_container_width=True, hide_index=True)
 
         st.divider()
 
@@ -468,6 +660,9 @@ if menu == "Super Admin" and st.session_state.is_admin:
                 st.success("Piloto creado")
         
         with st.expander("Editar piloto"):
+            if pilotos.empty:
+                st.info("No hay pilotos registrados.")
+                st.stop()
             piloto_seleccionado = st.selectbox(
                 "Seleccione piloto",
                 pilotos["id"],
@@ -1283,14 +1478,33 @@ if menu == "Dashboard":
                             f'alt="{piloto_sel["nombre"]}"/>'
                             '</div>'
                         )
+                    else:
+                        _foto_url = str(piloto_sel.get("foto_url") or "").strip()
+                        if _foto_url.startswith("https://"):
+                            _driver_img_html = (
+                                '<div class="pick-driver-visual">'
+                                f'<img src="{html.escape(_foto_url, quote=True)}" '
+                                f'alt="{html.escape(str(piloto_sel["nombre"]), quote=True)}"/>'
+                                '</div>'
+                            )
+
+                    _team_code, _team_color = _team_badge(
+                        piloto_sel["escuderia"], piloto_sel.get("color_escuderia")
+                    )
+                    _driver_name = html.escape(str(piloto_sel["nombre"]))
+                    _driver_code = html.escape(str(piloto_sel["codigo"]))
+                    _driver_team = html.escape(str(piloto_sel["escuderia"] or ""))
 
                     st.markdown(f"""
-                    <div class="pick-driver-card">
+                    <div class="pick-driver-card" style="--team-color:{_team_color}">
                         {_driver_img_html}
                         <div class="pick-driver-copy">
+                            <div class="pick-team-crest" aria-label="Escudo {_driver_team}">
+                                <span>{_team_code}</span>
+                            </div>
                             <div class="pick-driver-kicker">Tu elección para el 5° lugar</div>
-                            <div class="pick-driver-name">{piloto_sel['nombre']}</div>
-                            <div class="pick-driver-meta">{piloto_sel['codigo']} &nbsp;·&nbsp; {piloto_sel['escuderia']}</div>
+                            <div class="pick-driver-name">{_driver_name}</div>
+                            <div class="pick-driver-meta">{_driver_code} &nbsp;·&nbsp; {_driver_team}</div>
                         </div>
                     </div>
                     """, unsafe_allow_html=True)

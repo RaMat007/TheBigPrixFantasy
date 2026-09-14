@@ -74,7 +74,7 @@ body { background-color: var(--f1-bg); color: #e6eef8; }
 .pick-driver-card {
 	background: linear-gradient(145deg, #1d2531, #121821);
 	border: 1px solid var(--f1-border);
-	border-left: 4px solid var(--f1-red);
+	border-left: 4px solid var(--team-color, var(--f1-red));
 	border-radius: 14px;
 	display: flex;
 	align-items: stretch;
@@ -108,11 +108,50 @@ body { background-color: var(--f1-bg); color: #e6eef8; }
 	flex: 1;
 	flex-direction: column;
 	justify-content: center;
+	overflow: hidden;
 	padding: 24px 26px;
+	position: relative;
 }
 
+.pick-driver-copy::before {
+	background: radial-gradient(circle, color-mix(in srgb, var(--team-color, var(--f1-cyan)) 16%, transparent), transparent 68%);
+	content: "";
+	height: 260px;
+	position: absolute;
+	right: -88px;
+	top: -78px;
+	width: 260px;
+}
+
+.pick-team-crest {
+	align-items: center;
+	background: color-mix(in srgb, var(--team-color, var(--f1-cyan)) 12%, transparent);
+	border: 2px solid color-mix(in srgb, var(--team-color, var(--f1-cyan)) 48%, transparent);
+	clip-path: polygon(50% 0, 91% 18%, 84% 72%, 50% 100%, 16% 72%, 9% 18%);
+	color: color-mix(in srgb, var(--team-color, var(--f1-cyan)) 72%, white);
+	display: flex;
+	font-size: 1.05rem;
+	font-style: italic;
+	font-weight: 950;
+	height: 94px;
+	justify-content: center;
+	letter-spacing: -0.06em;
+	opacity: 0.72;
+	position: absolute;
+	right: 18px;
+	top: 16px;
+	transform: rotate(7deg);
+	width: 82px;
+}
+
+.pick-team-crest span { transform: rotate(-7deg); }
+
+.pick-driver-kicker,
+.pick-driver-name,
+.pick-driver-meta { position: relative; z-index: 1; }
+
 .pick-driver-kicker {
-	color: var(--f1-red);
+	color: var(--team-color, var(--f1-red));
 	font-size: 0.68rem;
 	font-weight: 850;
 	letter-spacing: 0.1em;
