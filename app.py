@@ -810,7 +810,13 @@ if menu == "Dashboard":
     # Ficha de piloto seleccionado (pick actual para la próxima carrera)
     # Debe ir dentro de with col_izq:
 
-    st.title("🏁 Dashboard")
+    st.markdown(
+        f"""
+        <div class="dashboard-eyebrow">Temporada {temporada['nombre']}</div>
+        <h1 class="dashboard-title">Dashboard</h1>
+        """,
+        unsafe_allow_html=True,
+    )
 
     # =========================
     # PERFIL DE USUARIO
@@ -846,17 +852,17 @@ if menu == "Dashboard":
     .profile-circle-wrap {{
         display: flex;
         align-items: center;
-        gap: 22px;
-        background: linear-gradient(135deg, #23272f 80%, #2e3140 100%);
-        border-radius: 18px;
-        padding: 18px 26px;
-        border: 2px solid #00eaff33;
-        margin-bottom: 22px;
-        max-width: 500px;
+        gap: 16px;
+        background: linear-gradient(135deg, #1b2330 0%, #151b25 100%);
+        border-radius: 14px;
+        padding: 14px 18px;
+        border: 1px solid rgba(56, 220, 255, 0.28);
+        margin-bottom: 12px;
+        width: 100%;
     }}
     .profile-circle-img {{
-        width: 90px;
-        height: 90px;
+        width: 58px;
+        height: 58px;
         border-radius: 50%;
         object-fit: cover;
         border: 3px solid #00eaff;
@@ -869,13 +875,13 @@ if menu == "Dashboard":
         gap: 4px;
     }}
     .profile-escuderia {{
-        font-size: 1.5rem;
+        font-size: 1.2rem;
         font-weight: 800;
         color: #fff;
         letter-spacing: 0.5px;
     }}
     .profile-label {{
-        font-size: 0.85rem;
+        font-size: 0.7rem;
         color: #00eaff;
         text-transform: uppercase;
         letter-spacing: 1.5px;
@@ -914,6 +920,48 @@ if menu == "Dashboard":
 
     proxima = crud.obtener_proxima_carrera(temporada_id)
 
+    # Los mismos datos del standing alimentan el resumen competitivo.
+    progreso = crud.progreso_pilotos_temporada(temporada_id)
+    usuarios_puntos = crud.listar_usuarios_con_puntos(temporada_id)
+
+    _mi_posicion = "—"
+    _mis_puntos = 0
+    _brecha_lider = 0
+    if usuarios_puntos is not None and not usuarios_puntos.empty:
+        _tabla_resumen = usuarios_puntos.reset_index(drop=True)
+        _tabla_resumen["posicion"] = _tabla_resumen.index + 1
+        _mi_fila = _tabla_resumen[_tabla_resumen["username"] == st.session_state.username]
+        if not _mi_fila.empty:
+            _mi_posicion = f"#{int(_mi_fila.iloc[0]['posicion'])}"
+            _mis_puntos = int(_mi_fila.iloc[0]["total_puntos"] or 0)
+            _puntos_lider = int(_tabla_resumen.iloc[0]["total_puntos"] or 0)
+            _brecha_lider = max(0, _puntos_lider - _mis_puntos)
+
+    _rounds_completados = 0 if progreso is None or progreso.empty else int(progreso["round"].nunique())
+    st.markdown(
+        f"""
+        <div class="dashboard-kpis">
+          <div class="dashboard-kpi">
+            <div class="dashboard-kpi-label">Posición</div>
+            <div class="dashboard-kpi-value dashboard-kpi-accent">{_mi_posicion}</div>
+          </div>
+          <div class="dashboard-kpi">
+            <div class="dashboard-kpi-label">Mis puntos</div>
+            <div class="dashboard-kpi-value">{_mis_puntos}</div>
+          </div>
+          <div class="dashboard-kpi">
+            <div class="dashboard-kpi-label">Distancia al líder</div>
+            <div class="dashboard-kpi-value">{_brecha_lider} pts</div>
+          </div>
+          <div class="dashboard-kpi">
+            <div class="dashboard-kpi-label">Carreras puntuadas</div>
+            <div class="dashboard-kpi-value">{_rounds_completados}</div>
+          </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
     # Sincronizar y auto-asignar solo una vez por sesión (evita lag en cada rerun)
     _sync_key = f"sync_done_{temporada_id}"
     if not st.session_state.get(_sync_key):
@@ -922,7 +970,7 @@ if menu == "Dashboard":
             crud.auto_asignar_picks_faltantes(proxima["id"], 0)
         st.session_state[_sync_key] = True
 
-    col_izq, col_der = st.columns(2)
+    col_izq, col_der = st.columns([1, 1.25], gap="large")
 
     # Bloque Próxima carrera (izquierda)
     with col_izq:
@@ -934,9 +982,10 @@ if menu == "Dashboard":
             box-shadow: 0 6px 32px 0 rgba(0,0,0,0.18), 0 1.5px 8px 0 #00eaff33;
             padding: 28px 22px 22px 22px;
             margin-bottom: 22px;
-            min-height: 260px;
-            max-width: 370px;
-            border: 2.5px solid #00eaff44;
+            min-height: 300px;
+            width: 100%;
+            max-width: none;
+            border: 1px solid #00eaff44;
             position: relative;
             margin-left: auto;
             margin-right: auto;
@@ -950,7 +999,7 @@ if menu == "Dashboard":
             background: linear-gradient(90deg, #00eaff 0%, #0055ff 100%);
             color: #fff;
             border-radius: 14px 14px 0 0;
-            font-size: 2.1rem;
+            font-size: 1.65rem;
             font-weight: 800;
             letter-spacing: 1.5px;
             text-align: center;
@@ -1129,24 +1178,16 @@ if menu == "Dashboard":
                         st.image(img_path, width=180)
 
                     st.markdown(f"""
-                    <div style="
-                        background:#222;
-                        padding:24px;
-                        border-radius:12px;
-                        text-align:center;
-                        color:white;
-                        margin-bottom:8px;
-                    ">
-                        <h2 style="margin-bottom:4px;">{piloto_sel['nombre']}</h2>
-                        <p style="margin:0; font-size:0.9rem;">Código: {piloto_sel['codigo']}</p>
-                        <p style="margin:0; font-size:0.9rem;">Escudería: {piloto_sel['escuderia']}</p>
+                    <div class="pick-driver-card">
+                        <div class="pick-driver-name">{piloto_sel['nombre']}</div>
+                        <div class="pick-driver-meta">{piloto_sel['codigo']} &nbsp;·&nbsp; {piloto_sel['escuderia']}</div>
                     </div>
                     """, unsafe_allow_html=True)
 
                     if carrera_bloqueada(proxima["inicio"]):
                         st.warning("La carrera ya está bloqueada para picks. No puedes cambiar tu selección.")
                     else:
-                        if st.button("Guardar Pick", key=f"dashboard_guardar_pick_{proxima['id']}"):
+                        if st.button("Guardar pick", key=f"dashboard_guardar_pick_{proxima['id']}", use_container_width=True):
                             crud.guardar_pick(
                                 st.session_state.user_id,
                                 proxima["id"],
@@ -1169,8 +1210,8 @@ if menu == "Dashboard":
                 lista_html = "<br/>".join(items)
                 st.markdown(
                     f"""
-                    <div style="margin-top:4px; font-size:0.85rem; line-height:1.05;">
-                        <b>Five Fives All Time</b><br/>
+                    <div class="top-picks-card">
+                        <div class="top-picks-title">Five Fives All Time</div>
                         {lista_html}
                     </div>
                     """,
@@ -1183,9 +1224,6 @@ if menu == "Dashboard":
     # TABLA GENERAL (STANDINGS + CARRERAS)
     # =========================
     st.subheader("📈 Standings General")
-
-    progreso = crud.progreso_pilotos_temporada(temporada_id)
-    usuarios_puntos = crud.listar_usuarios_con_puntos(temporada_id)
 
     if not progreso.empty:
         # Matriz resumen: filas = usuarios, columnas = carreras, con total al inicio
@@ -2131,4 +2169,3 @@ elif menu == "Bonos":
 
         st.dataframe(df_top, use_container_width=True, hide_index=True)
         st.caption("Top entradas individuales por carrera (puntos en una sola carrera).")
-
