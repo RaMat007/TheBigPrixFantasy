@@ -357,13 +357,14 @@ def actualizar_carreras_desde_f1db(temporada_id, year):
 # =========================
 # PILOTOS
 # =========================
-def crear_piloto(codigo, nombre, escuderia):
+def crear_piloto(codigo, nombre, escuderia, foto_url=None, color_escuderia=None):
     conn = get_connection()
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     cur.execute("""
-        INSERT INTO pilotos (codigo, nombre, escuderia, activo)
-        VALUES (%s, %s, %s, 1)
-    """, (codigo, nombre, escuderia))
+        INSERT INTO pilotos
+            (codigo, nombre, escuderia, foto_url, color_escuderia, activo)
+        VALUES (%s, %s, %s, %s, %s, 1)
+    """, (codigo, nombre, escuderia, foto_url, color_escuderia))
     conn.commit()
     conn.close()
 
@@ -372,7 +373,9 @@ def listar_pilotos(activos_only=True):
     conn = None
     try:
         conn = get_connection()
-        df = pd.read_sql_query("SELECT * FROM pilotos" + (" WHERE activo = 1" if activos_only else ""), conn)
+        query = "SELECT * FROM pilotos" + (" WHERE activo = 1" if activos_only else "")
+        query += " ORDER BY activo DESC, escuderia NULLS LAST, nombre"
+        df = pd.read_sql_query(query, conn)
         log.info("Pilotos listados correctamente.")
         return df
     except Exception as e:
@@ -421,6 +424,59 @@ def editar_piloto(piloto_id, codigo, nombre, escuderia, activo):
 
     conn.commit()
     conn.close()
+
+
+def aplicar_alineacion_pilotos(alineacion):
+    """Activa exactamente la parrilla confirmada y conserva todo el historial.
+
+    Los pilotos que salen de la alineación solo pasan a inactivos. No se borran
+    registros ni se alteran picks o resultados anteriores.
+    """
+    codigos = [str(p.get("codigo") or "").strip().upper() for p in alineacion]
+    if len(codigos) < 10 or any(not codigo for codigo in codigos):
+        raise ValueError("La alineación recibida está incompleta.")
+    if len(codigos) != len(set(codigos)):
+        raise ValueError("La alineación contiene pilotos repetidos.")
+
+    conn = get_connection()
+    try:
+        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        for piloto in alineacion:
+            codigo = str(piloto["codigo"]).strip().upper()
+            color = str(piloto.get("color_escuderia") or "").strip().lstrip("#") or None
+            cur.execute(
+                """
+                INSERT INTO pilotos
+                    (codigo, nombre, escuderia, foto_url, color_escuderia, activo)
+                VALUES (%s, %s, %s, %s, %s, 1)
+                ON CONFLICT (codigo) DO UPDATE SET
+                    nombre = EXCLUDED.nombre,
+                    escuderia = EXCLUDED.escuderia,
+                    foto_url = COALESCE(EXCLUDED.foto_url, pilotos.foto_url),
+                    color_escuderia = COALESCE(EXCLUDED.color_escuderia, pilotos.color_escuderia),
+                    activo = 1
+                """,
+                (
+                    codigo,
+                    piloto["nombre"],
+                    piloto.get("escuderia"),
+                    piloto.get("foto_url"),
+                    color,
+                ),
+            )
+
+        cur.execute(
+            "UPDATE pilotos SET activo = 0 WHERE NOT (codigo = ANY(%s)) AND activo = 1",
+            (codigos,),
+        )
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+
+    st.cache_data.clear()
 
 
 # =========================

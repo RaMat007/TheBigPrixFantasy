@@ -62,6 +62,88 @@ def _as_utc(value: str) -> datetime:
     return parsed.astimezone(timezone.utc)
 
 
+def _meeting_for_race(carrera: dict, sesiones: list[dict]) -> tuple[dict, list[dict]]:
+    """Encuentra el meeting de una carrera local con una tolerancia segura."""
+    inicio_local = _as_utc(carrera["inicio"])
+    carreras_api = [
+        s for s in sesiones
+        if s.get("session_name") == "Race" and s.get("date_start")
+        and not s.get("is_cancelled", False)
+    ]
+    if not carreras_api:
+        raise OpenF1Error("OpenF1 no devolvió carreras válidas para esa temporada.")
+
+    carrera_api = min(carreras_api, key=lambda s: abs(_as_utc(s["date_start"]) - inicio_local))
+    diferencia_horas = abs((_as_utc(carrera_api["date_start"]) - inicio_local).total_seconds()) / 3600
+    if diferencia_horas > 36:
+        raise OpenF1Error("No se encontró un fin de semana de OpenF1 que coincida con la carrera.")
+
+    meeting_key = carrera_api.get("meeting_key")
+    return carrera_api, [s for s in sesiones if s.get("meeting_key") == meeting_key]
+
+
+def obtener_alineacion(carrera: dict) -> dict:
+    """Obtiene la parrilla de la sesión más reciente disponible del GP.
+
+    La actualización nunca se aplica aquí: el administrador recibe una vista
+    previa y debe confirmarla. Esto evita que una consulta cambie picks.
+    """
+    if not carrera.get("inicio"):
+        raise OpenF1Error("La carrera seleccionada no tiene fecha de inicio.")
+
+    inicio_local = _as_utc(carrera["inicio"])
+    sesiones = _get_json("sessions", year=inicio_local.year)
+    carrera_api, sesiones_gp = _meeting_for_race(carrera, sesiones)
+    ahora = datetime.now(timezone.utc)
+
+    disponibles = [
+        s for s in sesiones_gp
+        if s.get("date_start")
+        and _as_utc(s["date_start"]) <= ahora
+        and s.get("session_name") != "Race"
+        and not s.get("is_cancelled", False)
+    ]
+    disponibles.sort(key=lambda s: _as_utc(s["date_start"]), reverse=True)
+
+    for sesion in disponibles:
+        pilotos = _get_json("drivers", session_key=sesion["session_key"])
+        alineacion = []
+        vistos = set()
+        for piloto in pilotos:
+            codigo = str(piloto.get("name_acronym") or "").strip().upper()
+            if not codigo or codigo in vistos:
+                continue
+            vistos.add(codigo)
+            alineacion.append(
+                {
+                    "codigo": codigo,
+                    "nombre": str(
+                        piloto.get("full_name") or piloto.get("broadcast_name") or codigo
+                    ).strip(),
+                    "escuderia": str(piloto.get("team_name") or "").strip(),
+                    "foto_url": piloto.get("headshot_url"),
+                    "color_escuderia": str(piloto.get("team_colour") or "").strip(),
+                    "numero": piloto.get("driver_number"),
+                }
+            )
+
+        # Una sesión incompleta no es una base segura para reemplazar la parrilla.
+        if len(alineacion) >= 20:
+            alineacion.sort(key=lambda p: (p["escuderia"], p["nombre"]))
+            return {
+                "session_key": sesion["session_key"],
+                "sesion": sesion.get("session_name") or "Sesión",
+                "fecha": sesion.get("date_start") or "",
+                "carrera": carrera_api.get("country_name") or carrera_api.get("location") or "Carrera",
+                "circuito": carrera_api.get("circuit_short_name") or "",
+                "alineacion": alineacion,
+            }
+
+    raise OpenF1Error(
+        "Todavía no hay una sesión completa disponible para confirmar la alineación de este GP."
+    )
+
+
 def obtener_clasificacion(carrera: dict) -> dict:
     """Obtiene la carrera OpenF1 más cercana por fecha y su clasificación final.
 
@@ -76,16 +158,7 @@ def obtener_clasificacion(carrera: dict) -> dict:
     if not sesiones:
         raise OpenF1Error(f"OpenF1 no devolvió carreras para {inicio_local.year}.")
 
-    sesiones_validas = [s for s in sesiones if s.get("date_start") and not s.get("is_cancelled", False)]
-    if not sesiones_validas:
-        raise OpenF1Error("OpenF1 no devolvió sesiones de carrera válidas.")
-
-    sesion = min(sesiones_validas, key=lambda s: abs(_as_utc(s["date_start"]) - inicio_local))
-    diferencia_horas = abs((_as_utc(sesion["date_start"]) - inicio_local).total_seconds()) / 3600
-    if diferencia_horas > 36:
-        raise OpenF1Error(
-            "No se encontró una carrera de OpenF1 que coincida con la fecha seleccionada."
-        )
+    sesion, _ = _meeting_for_race(carrera, sesiones)
 
     if sesion.get("date_end") and _as_utc(sesion["date_end"]) > datetime.now(timezone.utc):
         raise OpenF1Error("La carrera seleccionada todavía no ha terminado.")
