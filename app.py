@@ -351,8 +351,8 @@ if "user_id" not in st.session_state:
     tab_login, tab_registro, tab_reset = st.tabs(["Iniciar sesión", "Crear cuenta", "Restablecer contraseña"])
 
     with tab_login:
-        username = st.text_input("Usuario", key="login_user")
-        password = st.text_input("Contraseña", type="password", key="login_pass")
+        username = st.text_input("Usuario", key="login_user", autocomplete="username")
+        password = st.text_input("Contraseña", type="password", key="login_pass", autocomplete="current-password")
         if st.button("Entrar", key="btn_login"):
             user = validar_login(username, password)
             if user:
