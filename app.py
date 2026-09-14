@@ -81,21 +81,23 @@ def _load_css():
 def _get_piloto_image_path(codigo: str):
     """Devuelve la ruta a la imagen de un piloto si existe.
 
-    Busca en data/img/pilotos usando variantes del código (VER, ver, Ver...) y
-    extensiones comunes (png, jpg, jpeg, webp).
+    Busca primero en la carpeta activa de imágenes y después en la carpeta
+    histórica ``Imagenes Pilotos``. Soporta también los AVIF del repositorio.
     """
 
     if not codigo:
         return None
 
     variants = {str(codigo), str(codigo).upper(), str(codigo).lower()}
-    exts = ("png", "jpg", "jpeg", "webp")
+    exts = ("avif", "png", "jpg", "jpeg", "webp")
+    image_dirs = (IMG_DIR_PILOTOS, BASE_DIR / "Imagenes Pilotos")
 
-    for slug in variants:
-        for ext in exts:
-            p = IMG_DIR_PILOTOS / f"{slug}.{ext}"
-            if p.is_file():
-                return str(p)
+    for image_dir in image_dirs:
+        for slug in variants:
+            for ext in exts:
+                p = image_dir / f"{slug}.{ext}"
+                if p.is_file():
+                    return str(p)
 
     return None
 
@@ -938,6 +940,9 @@ if menu == "Dashboard":
             _brecha_lider = max(0, _puntos_lider - _mis_puntos)
 
     _rounds_completados = 0 if progreso is None or progreso.empty else int(progreso["round"].nunique())
+    _carreras_temporada = crud.listar_carreras_temporada(temporada_id)
+    _total_carreras = 0 if _carreras_temporada is None else len(_carreras_temporada.index)
+    _carreras_restantes = max(0, _total_carreras - _rounds_completados)
     st.markdown(
         f"""
         <div class="dashboard-kpis">
@@ -954,8 +959,8 @@ if menu == "Dashboard":
             <div class="dashboard-kpi-value">{_brecha_lider} pts</div>
           </div>
           <div class="dashboard-kpi">
-            <div class="dashboard-kpi-label">Carreras puntuadas</div>
-            <div class="dashboard-kpi-value">{_rounds_completados}</div>
+            <div class="dashboard-kpi-label">Carreras restantes</div>
+            <div class="dashboard-kpi-value">{_carreras_restantes}</div>
           </div>
         </div>
         """,
@@ -1174,13 +1179,30 @@ if menu == "Dashboard":
                     piloto_sel = pilotos[pilotos["id"] == piloto_id].iloc[0]
 
                     img_path = _get_piloto_image_path(piloto_sel["codigo"])
+                    _driver_img_html = ""
                     if img_path:
-                        st.image(img_path, width=180)
+                        _driver_bytes = Path(img_path).read_bytes()
+                        _driver_b64 = _b64.b64encode(_driver_bytes).decode("ascii")
+                        _driver_mime = {
+                            ".avif": "image/avif",
+                            ".png": "image/png",
+                            ".webp": "image/webp",
+                        }.get(Path(img_path).suffix.lower(), "image/jpeg")
+                        _driver_img_html = (
+                            '<div class="pick-driver-visual">'
+                            f'<img src="data:{_driver_mime};base64,{_driver_b64}" '
+                            f'alt="{piloto_sel["nombre"]}"/>'
+                            '</div>'
+                        )
 
                     st.markdown(f"""
                     <div class="pick-driver-card">
-                        <div class="pick-driver-name">{piloto_sel['nombre']}</div>
-                        <div class="pick-driver-meta">{piloto_sel['codigo']} &nbsp;·&nbsp; {piloto_sel['escuderia']}</div>
+                        {_driver_img_html}
+                        <div class="pick-driver-copy">
+                            <div class="pick-driver-kicker">Tu elección para el 5° lugar</div>
+                            <div class="pick-driver-name">{piloto_sel['nombre']}</div>
+                            <div class="pick-driver-meta">{piloto_sel['codigo']} &nbsp;·&nbsp; {piloto_sel['escuderia']}</div>
+                        </div>
                     </div>
                     """, unsafe_allow_html=True)
 
