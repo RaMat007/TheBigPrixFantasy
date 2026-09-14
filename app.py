@@ -309,8 +309,9 @@ def _cargar_usuario_en_sesion(user):
 
 
 def _recordar_usuario(user_id: int):
-    cliente = st.context.headers.get("User-Agent", "")
-    token = crear_token_sesion(user_id, cliente)
+    # Mantener la llamada compatible con procesos que aún tengan auth.py
+    # cargado antes del despliegue; la firma del token sigue siendo obligatoria.
+    token = crear_token_sesion(user_id)
     cookie_manager.set(
         AUTH_COOKIE_NAME,
         token,
@@ -330,9 +331,8 @@ if "user_id" not in st.session_state and not st.session_state.get("_logout_pendi
     _token_cookie = st.context.cookies.get(AUTH_COOKIE_NAME)
     _token_url = st.query_params.get(AUTH_QUERY_PARAM)
     _token_recordado = _token_cookie or _token_url
-    _cliente_actual = st.context.headers.get("User-Agent", "")
     _usuario_recordado = (
-        validar_token_sesion(_token_recordado, _cliente_actual)
+        validar_token_sesion(_token_recordado)
         if _token_recordado else None
     )
     if _usuario_recordado:
