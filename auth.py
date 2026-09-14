@@ -32,18 +32,27 @@ def _session_serializer() -> URLSafeTimedSerializer:
     return URLSafeTimedSerializer(_session_secret(), salt=SESSION_TOKEN_SALT)
 
 
-def crear_token_sesion(user_id: int) -> str:
+def _fingerprint_cliente(value: str) -> str:
+    return hashlib.sha256(str(value or "").encode()).hexdigest()[:20]
+
+
+def crear_token_sesion(user_id: int, cliente: str = "") -> str:
     """Crea un token firmado; nunca guarda usuario o contraseña en texto plano."""
-    return _session_serializer().dumps({"uid": int(user_id)})
+    return _session_serializer().dumps(
+        {"uid": int(user_id), "fp": _fingerprint_cliente(cliente)}
+    )
 
 
-def validar_token_sesion(token: str):
+def validar_token_sesion(token: str, cliente: str = ""):
     """Valida el token recordado y vuelve a consultar al usuario en la base."""
     if not token:
         return None
     try:
         payload = _session_serializer().loads(token, max_age=SESSION_TOKEN_MAX_AGE)
         user_id = int(payload["uid"])
+        token_fp = payload.get("fp")
+        if token_fp and token_fp != _fingerprint_cliente(cliente):
+            return None
     except (BadSignature, SignatureExpired, KeyError, TypeError, ValueError):
         return None
     return get_usuario_by_id(user_id)
