@@ -783,32 +783,33 @@ if menu == "Super Admin" and st.session_state.is_admin:
             st.dataframe(pd.DataFrame(_filas_preview), use_container_width=True, hide_index=True)
 
             if _faltantes:
-                st.error(
-                    "No se puede guardar: estos pilotos activos no aparecen en OpenF1: "
-                    + ", ".join(_faltantes)
-                )
-            else:
                 st.warning(
-                    "Al confirmar se reemplazarán los resultados actuales de esta carrera y se recalcularán sus puntos."
+                    "Pilotos activos que no participaron en esta carrera: "
+                    + ", ".join(_faltantes)
+                    + ". No se les guardará posición; cualquier pick asociado recibirá 0 puntos."
                 )
-                _confirmar_api = st.checkbox(
-                    "Revisé la carrera y la clasificación",
-                    key=f"openf1_confirmar_{carrera_id}",
-                )
-                if st.button(
-                    "✅ Guardar clasificación y recalcular",
-                    key=f"openf1_guardar_{carrera_id}",
-                    disabled=not _confirmar_api,
-                    type="primary",
-                ):
-                    try:
-                        crud.importar_resultados_carrera(carrera_id, _resultados_importar)
-                        st.session_state.pop(_sync_state_key, None)
-                        st.cache_data.clear()
-                        st.success("Clasificación importada y puntos recalculados correctamente.")
-                        st.rerun()
-                    except Exception as exc:
-                        st.error(f"No se guardó ningún cambio: {exc}")
+
+            st.warning(
+                "Al confirmar se reemplazarán los resultados actuales de esta carrera y se recalcularán sus puntos."
+            )
+            _confirmar_api = st.checkbox(
+                "Revisé la carrera y la clasificación",
+                key=f"openf1_confirmar_{carrera_id}",
+            )
+            if st.button(
+                "✅ Guardar clasificación y recalcular",
+                key=f"openf1_guardar_{carrera_id}",
+                disabled=not _confirmar_api,
+                type="primary",
+            ):
+                try:
+                    crud.importar_resultados_carrera(carrera_id, _resultados_importar)
+                    st.session_state.pop(_sync_state_key, None)
+                    st.cache_data.clear()
+                    st.success("Clasificación importada y puntos recalculados correctamente.")
+                    st.rerun()
+                except Exception as exc:
+                    st.error(f"No se guardó ningún cambio: {exc}")
 
         st.divider()
 
