@@ -1,10 +1,13 @@
 # auth.py
 from db import get_connection
+import base64
 import hashlib
+import hmac
+import json
 import os
+import time
 import psycopg2.extras
 import streamlit as st
-from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 
 
 SESSION_TOKEN_MAX_AGE = 12 * 60 * 60
@@ -15,46 +18,94 @@ def _session_secret() -> str:
     """Obtiene una llave privada estable sin exponerla al navegador."""
     configured = os.environ.get("AUTH_COOKIE_SECRET", "")
     database_url = os.environ.get("DATABASE_URL", "")
+
     try:
-        configured = str(st.secrets.get("AUTH_COOKIE_SECRET", configured) or configured)
-        database_url = str(st.secrets.get("DATABASE_URL", database_url) or database_url)
+        if "AUTH_COOKIE_SECRET" in st.secrets:
+            configured = str(st.secrets["AUTH_COOKIE_SECRET"])
+        if "DATABASE_URL" in st.secrets:
+            database_url = str(st.secrets["DATABASE_URL"])
     except Exception:
         pass
 
     if configured:
         return configured
+
     if not database_url:
         raise RuntimeError("No hay una llave disponible para firmar la sesión.")
-    return hashlib.sha256(f"tbpf:{database_url}".encode()).hexdigest()
 
-
-def _session_serializer() -> URLSafeTimedSerializer:
-    return URLSafeTimedSerializer(_session_secret(), salt=SESSION_TOKEN_SALT)
+    return hashlib.sha256(
+        f"{SESSION_TOKEN_SALT}:{database_url}".encode("utf-8")
+    ).hexdigest()
 
 
 def _fingerprint_cliente(value: str) -> str:
-    return hashlib.sha256(str(value or "").encode()).hexdigest()[:20]
+    return hashlib.sha256(str(value or "").encode("utf-8")).hexdigest()[:20]
+
+
+def _b64_encode(data: bytes) -> str:
+    return base64.urlsafe_b64encode(data).decode("ascii").rstrip("=")
+
+
+def _b64_decode(value: str) -> bytes:
+    padding = "=" * (-len(value) % 4)
+    return base64.urlsafe_b64decode(value + padding)
 
 
 def crear_token_sesion(user_id: int, cliente: str = "", *_, **__) -> str:
-    """Crea un token firmado y mantiene compatibilidad con llamadas antiguas/nuevas."""
-    return _session_serializer().dumps(
-        {"uid": int(user_id), "fp": _fingerprint_cliente(cliente)}
+    """Crea un token HMAC firmado válido durante 12 horas."""
+    payload = {
+        "uid": int(user_id),
+        "fp": _fingerprint_cliente(cliente),
+        "exp": int(time.time()) + SESSION_TOKEN_MAX_AGE,
+    }
+
+    payload_b64 = _b64_encode(
+        json.dumps(
+            payload,
+            separators=(",", ":"),
+            sort_keys=True,
+        ).encode("utf-8")
     )
+
+    firma = hmac.new(
+        _session_secret().encode("utf-8"),
+        payload_b64.encode("ascii"),
+        hashlib.sha256,
+    ).hexdigest()
+
+    return f"{payload_b64}.{firma}"
 
 
 def validar_token_sesion(token: str, cliente: str = "", *_, **__):
-    """Valida el token recordado y vuelve a consultar al usuario en la base."""
+    """Valida firma, expiración y navegador del token recordado."""
     if not token:
         return None
+
     try:
-        payload = _session_serializer().loads(token, max_age=SESSION_TOKEN_MAX_AGE)
-        user_id = int(payload["uid"])
-        token_fp = payload.get("fp")
-        if token_fp and token_fp != _fingerprint_cliente(cliente):
+        payload_b64, firma_recibida = token.split(".", 1)
+
+        firma_esperada = hmac.new(
+            _session_secret().encode("utf-8"),
+            payload_b64.encode("ascii"),
+            hashlib.sha256,
+        ).hexdigest()
+
+        if not hmac.compare_digest(firma_recibida, firma_esperada):
             return None
-    except (BadSignature, SignatureExpired, KeyError, TypeError, ValueError):
+
+        payload = json.loads(_b64_decode(payload_b64).decode("utf-8"))
+
+        if int(payload["exp"]) < int(time.time()):
+            return None
+
+        if payload.get("fp") != _fingerprint_cliente(cliente):
+            return None
+
+        user_id = int(payload["uid"])
+
+    except (ValueError, TypeError, KeyError, json.JSONDecodeError):
         return None
+
     return get_usuario_by_id(user_id)
 
 
