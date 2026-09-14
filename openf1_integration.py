@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import time
 from datetime import datetime, timezone
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
@@ -10,7 +11,8 @@ from urllib.request import Request, urlopen
 
 
 API_BASE = "https://api.openf1.org/v1"
-TIMEOUT_SECONDS = 20
+TIMEOUT_SECONDS = 35
+MAX_ATTEMPTS = 3
 
 
 class OpenF1Error(RuntimeError):
@@ -19,14 +21,34 @@ class OpenF1Error(RuntimeError):
 
 def _get_json(endpoint: str, **params):
     url = f"{API_BASE}/{endpoint}?{urlencode(params)}"
-    request = Request(url, headers={"User-Agent": "TheBigPrixFantasy/1.0"})
-    try:
-        with urlopen(request, timeout=TIMEOUT_SECONDS) as response:
-            return json.loads(response.read().decode("utf-8"))
-    except HTTPError as exc:
-        raise OpenF1Error(f"OpenF1 respondió con HTTP {exc.code}.") from exc
-    except (URLError, TimeoutError, json.JSONDecodeError) as exc:
-        raise OpenF1Error("No fue posible obtener una respuesta válida de OpenF1.") from exc
+    last_error = None
+    for attempt in range(1, MAX_ATTEMPTS + 1):
+        request = Request(url, headers={"User-Agent": "TheBigPrixFantasy/1.0"})
+        try:
+            with urlopen(request, timeout=TIMEOUT_SECONDS) as response:
+                return json.loads(response.read().decode("utf-8"))
+        except HTTPError as exc:
+            last_error = exc
+            # 429 y errores del servidor suelen ser transitorios.
+            if exc.code not in (429, 500, 502, 503, 504):
+                raise OpenF1Error(f"OpenF1 respondió con HTTP {exc.code}.") from exc
+        except (URLError, TimeoutError, json.JSONDecodeError) as exc:
+            last_error = exc
+
+        if attempt < MAX_ATTEMPTS:
+            time.sleep(attempt)
+
+    if isinstance(last_error, HTTPError):
+        detalle = f"HTTP {last_error.code}"
+    elif isinstance(last_error, URLError):
+        detalle = str(last_error.reason)
+    elif isinstance(last_error, TimeoutError):
+        detalle = "tiempo de espera agotado"
+    else:
+        detalle = "respuesta JSON inválida"
+    raise OpenF1Error(
+        f"OpenF1 no respondió después de {MAX_ATTEMPTS} intentos ({detalle}). Intenta nuevamente."
+    ) from last_error
 
 
 def _as_utc(value: str) -> datetime:
