@@ -319,8 +319,10 @@ def _recordar_usuario(user_id: int):
     )
 
 
-if "user_id" not in st.session_state:
-    _token_recordado = cookie_manager.get(AUTH_COOKIE_NAME)
+if "user_id" not in st.session_state and not st.session_state.get("_logout_pending"):
+    # La lectura nativa está disponible desde la primera petición y evita
+    # depender del ciclo asíncrono del componente, especialmente en Safari.
+    _token_recordado = st.context.cookies.get(AUTH_COOKIE_NAME)
     _usuario_recordado = validar_token_sesion(_token_recordado) if _token_recordado else None
     if _usuario_recordado:
         _cargar_usuario_en_sesion(_usuario_recordado)
@@ -340,9 +342,14 @@ if "user_id" not in st.session_state:
         if st.button("Entrar", key="btn_login"):
             user = validar_login(username, password)
             if user:
+                st.session_state.pop("_logout_pending", None)
                 _cargar_usuario_en_sesion(user)
                 _recordar_usuario(user["id"])
-                st.rerun()
+                # No forzar st.rerun: primero dejamos que el navegador confirme
+                # la escritura del cookie. El componente dispara el rerun al
+                # terminar y entonces aparece el dashboard.
+                st.success("Sesión iniciada. Cargando dashboard…")
+                st.stop()
             else:
                 st.error("Credenciales incorrectas")
 
@@ -443,10 +450,13 @@ if "escuderia" not in st.session_state or "foto_perfil" not in st.session_state:
 st.sidebar.success(f"Usuario: {st.session_state.username}")
 
 if st.sidebar.button("Cerrar sesión"):
-    if cookie_manager.get(AUTH_COOKIE_NAME):
+    st.session_state["_logout_pending"] = True
+    if st.context.cookies.get(AUTH_COOKIE_NAME):
         cookie_manager.delete(AUTH_COOKIE_NAME, key="tbpf_cookie_delete")
-    st.session_state.clear()
-    st.rerun()
+    for _auth_key in ("user_id", "username", "is_admin", "escuderia", "foto_perfil"):
+        st.session_state.pop(_auth_key, None)
+    # Igual que en el login, permitimos que Safari procese primero el borrado.
+    st.stop()
 
 if st.session_state.is_admin:
     menu_opciones = ["Super Admin", "Dashboard", "Escuderías", "Carreras", "Race View", "Bonos"]
