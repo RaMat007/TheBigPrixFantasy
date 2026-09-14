@@ -6,6 +6,7 @@ import altair as alt
 from logger import get_logger
 import crud
 import f1db_integration
+import openf1_integration
 from rules import calcular_puntos, carrera_bloqueada
 from auth import validar_login, verificar_correo, actualizar_password, get_usuario_by_id
 from db import init_db
@@ -720,19 +721,106 @@ if menu == "Super Admin" and st.session_state.is_admin:
         )
 
         carrera_id = carrera_label_map[carrera_label]
+        carrera_row = carreras[carreras["id"] == carrera_id].iloc[0].to_dict()
 
         st.divider()
 
         # =========================
-        # Pilotos
+        # Sincronización OpenF1
         # =========================
+        st.subheader("🌐 Sincronizar clasificación")
+        st.caption(
+            "Consulta la clasificación final, la cruza con tus pilotos y permite revisarla antes de guardar."
+        )
+
+        _sync_state_key = "openf1_resultados_preview"
+        if st.button("🔄 Consultar OpenF1", key=f"openf1_consultar_{carrera_id}"):
+            try:
+                with st.spinner("Consultando clasificación final..."):
+                    _preview = openf1_integration.obtener_clasificacion(carrera_row)
+                _preview["carrera_id"] = int(carrera_id)
+                st.session_state[_sync_state_key] = _preview
+            except openf1_integration.OpenF1Error as exc:
+                st.session_state.pop(_sync_state_key, None)
+                st.error(str(exc))
+
+        _preview = st.session_state.get(_sync_state_key)
+        if _preview and _preview.get("carrera_id") == int(carrera_id):
+            st.success(
+                f"Coincidencia: {_preview['carrera']} · {_preview['circuito']} "
+                f"(sesión {_preview['session_key']})"
+            )
+
+            _pilotos_locales = crud.listar_pilotos(activos_only=True)
+            _local_por_codigo = {
+                str(row.codigo).upper(): int(row.id)
+                for row in _pilotos_locales.itertuples()
+            }
+            _api_por_codigo = {r["codigo"]: r for r in _preview["resultados"]}
+            _faltantes = sorted(set(_local_por_codigo) - set(_api_por_codigo))
+
+            _filas_preview = []
+            _resultados_importar = []
+            for resultado in _preview["resultados"]:
+                codigo = resultado["codigo"]
+                piloto_id = _local_por_codigo.get(codigo)
+                estado = "Listo" if piloto_id else "No registrado"
+                incidencia = "DSQ" if resultado["dsq"] else "DNS" if resultado["dns"] else "DNF" if resultado["dnf"] else ""
+                _filas_preview.append(
+                    {
+                        "Pos.": resultado["posicion"] if resultado["posicion"] is not None else "—",
+                        "Código": codigo,
+                        "Piloto": resultado["nombre"],
+                        "Incidencia": incidencia,
+                        "Cruce": estado,
+                    }
+                )
+                if piloto_id and resultado["posicion"] is not None:
+                    _resultados_importar.append(
+                        {"piloto_id": piloto_id, "posicion": resultado["posicion"]}
+                    )
+
+            st.dataframe(pd.DataFrame(_filas_preview), use_container_width=True, hide_index=True)
+
+            if _faltantes:
+                st.error(
+                    "No se puede guardar: estos pilotos activos no aparecen en OpenF1: "
+                    + ", ".join(_faltantes)
+                )
+            else:
+                st.warning(
+                    "Al confirmar se reemplazarán los resultados actuales de esta carrera y se recalcularán sus puntos."
+                )
+                _confirmar_api = st.checkbox(
+                    "Revisé la carrera y la clasificación",
+                    key=f"openf1_confirmar_{carrera_id}",
+                )
+                if st.button(
+                    "✅ Guardar clasificación y recalcular",
+                    key=f"openf1_guardar_{carrera_id}",
+                    disabled=not _confirmar_api,
+                    type="primary",
+                ):
+                    try:
+                        crud.importar_resultados_carrera(carrera_id, _resultados_importar)
+                        st.session_state.pop(_sync_state_key, None)
+                        st.cache_data.clear()
+                        st.success("Clasificación importada y puntos recalculados correctamente.")
+                        st.rerun()
+                    except Exception as exc:
+                        st.error(f"No se guardó ningún cambio: {exc}")
+
+        st.divider()
+
+        # =========================
+        # Carga manual
+        # =========================
+        st.subheader("✍️ Carga manual")
         pilotos = crud.listar_pilotos(activos_only=True)
 
         if pilotos.empty:
             st.warning("No hay pilotos activos")
             st.stop()
-
-        st.subheader("Resultados")
 
         # Opciones de posición: sin posición, DNF + 1..N (N = cantidad de pilotos)
         max_pos = len(pilotos)
