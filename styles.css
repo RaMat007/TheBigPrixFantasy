@@ -76,8 +76,48 @@ body { background-color: var(--f1-bg); color: #e6eef8; }
 	border: 1px solid var(--f1-border);
 	border-left: 4px solid var(--f1-red);
 	border-radius: 14px;
-	padding: 22px 24px;
+	display: flex;
+	align-items: stretch;
+	min-height: 220px;
+	overflow: hidden;
 	margin: 10px 0 12px;
+}
+
+.pick-driver-visual {
+	align-items: flex-end;
+	background:
+		linear-gradient(135deg, rgba(56, 220, 255, 0.14), rgba(22, 119, 255, 0.02)),
+		repeating-linear-gradient(135deg, transparent 0 14px, rgba(255, 255, 255, 0.025) 14px 15px);
+	display: flex;
+	flex: 0 0 42%;
+	justify-content: center;
+	min-width: 180px;
+	position: relative;
+}
+
+.pick-driver-visual img {
+	display: block;
+	height: 220px;
+	width: 100%;
+	object-fit: cover;
+	object-position: center top;
+}
+
+.pick-driver-copy {
+	display: flex;
+	flex: 1;
+	flex-direction: column;
+	justify-content: center;
+	padding: 24px 26px;
+}
+
+.pick-driver-kicker {
+	color: var(--f1-red);
+	font-size: 0.68rem;
+	font-weight: 850;
+	letter-spacing: 0.1em;
+	margin-bottom: 7px;
+	text-transform: uppercase;
 }
 
 .pick-driver-name {
@@ -122,6 +162,10 @@ body { background-color: var(--f1-bg); color: #e6eef8; }
 	.dashboard-kpis { grid-template-columns: 1fr 1fr; gap: 8px; }
 	.dashboard-kpi { padding: 13px; }
 	.dashboard-kpi-value { font-size: 1.35rem; }
+	.pick-driver-card { flex-direction: column; }
+	.pick-driver-visual { flex-basis: 190px; min-width: 0; }
+	.pick-driver-visual img { height: 190px; object-position: center top; }
+	.pick-driver-copy { padding: 18px; }
 }
 .stButton>button { background-color: #ff4d4f; color: white; border-radius:6px;}
 
