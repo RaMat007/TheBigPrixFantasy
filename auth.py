@@ -36,14 +36,14 @@ def _fingerprint_cliente(value: str) -> str:
     return hashlib.sha256(str(value or "").encode()).hexdigest()[:20]
 
 
-def crear_token_sesion(user_id: int, cliente: str = "") -> str:
-    """Crea un token firmado; nunca guarda usuario o contraseña en texto plano."""
+def crear_token_sesion(user_id: int, cliente: str = "", *_, **__) -> str:
+    """Crea un token firmado y mantiene compatibilidad con llamadas antiguas/nuevas."""
     return _session_serializer().dumps(
         {"uid": int(user_id), "fp": _fingerprint_cliente(cliente)}
     )
 
 
-def validar_token_sesion(token: str, cliente: str = ""):
+def validar_token_sesion(token: str, cliente: str = "", *_, **__):
     """Valida el token recordado y vuelve a consultar al usuario en la base."""
     if not token:
         return None
@@ -57,11 +57,14 @@ def validar_token_sesion(token: str, cliente: str = ""):
         return None
     return get_usuario_by_id(user_id)
 
+
 def hash_password(password: str) -> str:
     return hashlib.sha256(password.encode()).hexdigest()
 
+
 def verify_password(password: str, stored_hash: str) -> bool:
     return hashlib.sha256(password.encode()).hexdigest() == stored_hash
+
 
 def validar_login(username: str, password: str):
     """
