@@ -62,6 +62,22 @@ def _as_utc(value: str) -> datetime:
     return parsed.astimezone(timezone.utc)
 
 
+def _normalizar_escuderia(nombre: str) -> str:
+    """Convierte nombres de OpenF1 al formato canónico usado por la app."""
+    limpio = " ".join(str(nombre or "").strip().split())
+    clave = limpio.casefold()
+    aliases = {
+        "haas f1 team": "Haas",
+        "haas": "Haas",
+        "red bull racing": "RedBull",
+        "redbull": "RedBull",
+        "racing bulls": "Racing Bulls",
+        "rb f1 team": "Racing Bulls",
+        "visa cash app rb": "Racing Bulls",
+    }
+    return aliases.get(clave, limpio)
+
+
 def _meeting_for_race(carrera: dict, sesiones: list[dict]) -> tuple[dict, list[dict]]:
     """Encuentra el meeting de una carrera local con una tolerancia segura."""
     inicio_local = _as_utc(carrera["inicio"])
@@ -120,7 +136,7 @@ def obtener_alineacion(carrera: dict) -> dict:
                     "nombre": str(
                         piloto.get("full_name") or piloto.get("broadcast_name") or codigo
                     ).strip(),
-                    "escuderia": str(piloto.get("team_name") or "").strip(),
+                    "escuderia": _normalizar_escuderia(piloto.get("team_name") or ""),
                     "foto_url": piloto.get("headshot_url"),
                     "color_escuderia": str(piloto.get("team_colour") or "").strip(),
                     "numero": piloto.get("driver_number"),
