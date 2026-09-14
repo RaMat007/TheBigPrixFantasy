@@ -6,6 +6,7 @@ import altair as alt
 from logger import get_logger
 import crud
 import f1db_integration
+import openf1_integration
 from rules import calcular_puntos, carrera_bloqueada
 from auth import validar_login, verificar_correo, actualizar_password, get_usuario_by_id
 from db import init_db
@@ -81,21 +82,23 @@ def _load_css():
 def _get_piloto_image_path(codigo: str):
     """Devuelve la ruta a la imagen de un piloto si existe.
 
-    Busca en data/img/pilotos usando variantes del código (VER, ver, Ver...) y
-    extensiones comunes (png, jpg, jpeg, webp).
+    Busca primero en la carpeta activa de imágenes y después en la carpeta
+    histórica ``Imagenes Pilotos``. Soporta también los AVIF del repositorio.
     """
 
     if not codigo:
         return None
 
     variants = {str(codigo), str(codigo).upper(), str(codigo).lower()}
-    exts = ("png", "jpg", "jpeg", "webp")
+    exts = ("avif", "png", "jpg", "jpeg", "webp")
+    image_dirs = (IMG_DIR_PILOTOS, BASE_DIR / "Imagenes Pilotos")
 
-    for slug in variants:
-        for ext in exts:
-            p = IMG_DIR_PILOTOS / f"{slug}.{ext}"
-            if p.is_file():
-                return str(p)
+    for image_dir in image_dirs:
+        for slug in variants:
+            for ext in exts:
+                p = image_dir / f"{slug}.{ext}"
+                if p.is_file():
+                    return str(p)
 
     return None
 
@@ -718,19 +721,107 @@ if menu == "Super Admin" and st.session_state.is_admin:
         )
 
         carrera_id = carrera_label_map[carrera_label]
+        carrera_row = carreras[carreras["id"] == carrera_id].iloc[0].to_dict()
 
         st.divider()
 
         # =========================
-        # Pilotos
+        # Sincronización OpenF1
         # =========================
+        st.subheader("🌐 Sincronizar clasificación")
+        st.caption(
+            "Consulta la clasificación final, la cruza con tus pilotos y permite revisarla antes de guardar."
+        )
+
+        _sync_state_key = "openf1_resultados_preview"
+        if st.button("🔄 Consultar OpenF1", key=f"openf1_consultar_{carrera_id}"):
+            try:
+                with st.spinner("Consultando clasificación final..."):
+                    _preview = openf1_integration.obtener_clasificacion(carrera_row)
+                _preview["carrera_id"] = int(carrera_id)
+                st.session_state[_sync_state_key] = _preview
+            except openf1_integration.OpenF1Error as exc:
+                st.session_state.pop(_sync_state_key, None)
+                st.error(str(exc))
+
+        _preview = st.session_state.get(_sync_state_key)
+        if _preview and _preview.get("carrera_id") == int(carrera_id):
+            st.success(
+                f"Coincidencia: {_preview['carrera']} · {_preview['circuito']} "
+                f"(sesión {_preview['session_key']})"
+            )
+
+            _pilotos_locales = crud.listar_pilotos(activos_only=True)
+            _local_por_codigo = {
+                str(row.codigo).upper(): int(row.id)
+                for row in _pilotos_locales.itertuples()
+            }
+            _api_por_codigo = {r["codigo"]: r for r in _preview["resultados"]}
+            _faltantes = sorted(set(_local_por_codigo) - set(_api_por_codigo))
+
+            _filas_preview = []
+            _resultados_importar = []
+            for resultado in _preview["resultados"]:
+                codigo = resultado["codigo"]
+                piloto_id = _local_por_codigo.get(codigo)
+                estado = "Listo" if piloto_id else "No registrado"
+                incidencia = "DSQ" if resultado["dsq"] else "DNS" if resultado["dns"] else "DNF" if resultado["dnf"] else ""
+                _filas_preview.append(
+                    {
+                        "Pos.": resultado["posicion"] if resultado["posicion"] is not None else "—",
+                        "Código": codigo,
+                        "Piloto": resultado["nombre"],
+                        "Incidencia": incidencia,
+                        "Cruce": estado,
+                    }
+                )
+                if piloto_id and resultado["posicion"] is not None:
+                    _resultados_importar.append(
+                        {"piloto_id": piloto_id, "posicion": resultado["posicion"]}
+                    )
+
+            st.dataframe(pd.DataFrame(_filas_preview), use_container_width=True, hide_index=True)
+
+            if _faltantes:
+                st.warning(
+                    "Pilotos activos que no participaron en esta carrera: "
+                    + ", ".join(_faltantes)
+                    + ". No se les guardará posición; cualquier pick asociado recibirá 0 puntos."
+                )
+
+            st.warning(
+                "Al confirmar se reemplazarán los resultados actuales de esta carrera y se recalcularán sus puntos."
+            )
+            _confirmar_api = st.checkbox(
+                "Revisé la carrera y la clasificación",
+                key=f"openf1_confirmar_{carrera_id}",
+            )
+            if st.button(
+                "✅ Guardar clasificación y recalcular",
+                key=f"openf1_guardar_{carrera_id}",
+                disabled=not _confirmar_api,
+                type="primary",
+            ):
+                try:
+                    crud.importar_resultados_carrera(carrera_id, _resultados_importar)
+                    st.session_state.pop(_sync_state_key, None)
+                    st.cache_data.clear()
+                    st.success("Clasificación importada y puntos recalculados correctamente.")
+                    st.rerun()
+                except Exception as exc:
+                    st.error(f"No se guardó ningún cambio: {exc}")
+
+        st.divider()
+
+        # =========================
+        # Carga manual
+        # =========================
+        st.subheader("✍️ Carga manual")
         pilotos = crud.listar_pilotos(activos_only=True)
 
         if pilotos.empty:
             st.warning("No hay pilotos activos")
             st.stop()
-
-        st.subheader("Resultados")
 
         # Opciones de posición: sin posición, DNF + 1..N (N = cantidad de pilotos)
         max_pos = len(pilotos)
@@ -810,7 +901,13 @@ if menu == "Dashboard":
     # Ficha de piloto seleccionado (pick actual para la próxima carrera)
     # Debe ir dentro de with col_izq:
 
-    st.title("🏁 Dashboard")
+    st.markdown(
+        f"""
+        <div class="dashboard-eyebrow">Temporada {temporada['nombre']}</div>
+        <h1 class="dashboard-title">Dashboard</h1>
+        """,
+        unsafe_allow_html=True,
+    )
 
     # =========================
     # PERFIL DE USUARIO
@@ -846,17 +943,17 @@ if menu == "Dashboard":
     .profile-circle-wrap {{
         display: flex;
         align-items: center;
-        gap: 22px;
-        background: linear-gradient(135deg, #23272f 80%, #2e3140 100%);
-        border-radius: 18px;
-        padding: 18px 26px;
-        border: 2px solid #00eaff33;
-        margin-bottom: 22px;
-        max-width: 500px;
+        gap: 16px;
+        background: linear-gradient(135deg, #1b2330 0%, #151b25 100%);
+        border-radius: 14px;
+        padding: 14px 18px;
+        border: 1px solid rgba(56, 220, 255, 0.28);
+        margin-bottom: 12px;
+        width: 100%;
     }}
     .profile-circle-img {{
-        width: 90px;
-        height: 90px;
+        width: 58px;
+        height: 58px;
         border-radius: 50%;
         object-fit: cover;
         border: 3px solid #00eaff;
@@ -869,13 +966,13 @@ if menu == "Dashboard":
         gap: 4px;
     }}
     .profile-escuderia {{
-        font-size: 1.5rem;
+        font-size: 1.2rem;
         font-weight: 800;
         color: #fff;
         letter-spacing: 0.5px;
     }}
     .profile-label {{
-        font-size: 0.85rem;
+        font-size: 0.7rem;
         color: #00eaff;
         text-transform: uppercase;
         letter-spacing: 1.5px;
@@ -914,6 +1011,51 @@ if menu == "Dashboard":
 
     proxima = crud.obtener_proxima_carrera(temporada_id)
 
+    # Los mismos datos del standing alimentan el resumen competitivo.
+    progreso = crud.progreso_pilotos_temporada(temporada_id)
+    usuarios_puntos = crud.listar_usuarios_con_puntos(temporada_id)
+
+    _mi_posicion = "—"
+    _mis_puntos = 0
+    _brecha_lider = 0
+    if usuarios_puntos is not None and not usuarios_puntos.empty:
+        _tabla_resumen = usuarios_puntos.reset_index(drop=True)
+        _tabla_resumen["posicion"] = _tabla_resumen.index + 1
+        _mi_fila = _tabla_resumen[_tabla_resumen["username"] == st.session_state.username]
+        if not _mi_fila.empty:
+            _mi_posicion = f"#{int(_mi_fila.iloc[0]['posicion'])}"
+            _mis_puntos = int(_mi_fila.iloc[0]["total_puntos"] or 0)
+            _puntos_lider = int(_tabla_resumen.iloc[0]["total_puntos"] or 0)
+            _brecha_lider = max(0, _puntos_lider - _mis_puntos)
+
+    _rounds_completados = 0 if progreso is None or progreso.empty else int(progreso["round"].nunique())
+    _carreras_temporada = crud.listar_carreras_temporada(temporada_id)
+    _total_carreras = 0 if _carreras_temporada is None else len(_carreras_temporada.index)
+    _carreras_restantes = max(0, _total_carreras - _rounds_completados)
+    st.markdown(
+        f"""
+        <div class="dashboard-kpis">
+          <div class="dashboard-kpi">
+            <div class="dashboard-kpi-label">Posición</div>
+            <div class="dashboard-kpi-value dashboard-kpi-accent">{_mi_posicion}</div>
+          </div>
+          <div class="dashboard-kpi">
+            <div class="dashboard-kpi-label">Mis puntos</div>
+            <div class="dashboard-kpi-value">{_mis_puntos}</div>
+          </div>
+          <div class="dashboard-kpi">
+            <div class="dashboard-kpi-label">Distancia al líder</div>
+            <div class="dashboard-kpi-value">{_brecha_lider} pts</div>
+          </div>
+          <div class="dashboard-kpi">
+            <div class="dashboard-kpi-label">Carreras restantes</div>
+            <div class="dashboard-kpi-value">{_carreras_restantes}</div>
+          </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
     # Sincronizar y auto-asignar solo una vez por sesión (evita lag en cada rerun)
     _sync_key = f"sync_done_{temporada_id}"
     if not st.session_state.get(_sync_key):
@@ -922,7 +1064,7 @@ if menu == "Dashboard":
             crud.auto_asignar_picks_faltantes(proxima["id"], 0)
         st.session_state[_sync_key] = True
 
-    col_izq, col_der = st.columns(2)
+    col_izq, col_der = st.columns([1, 1.25], gap="large")
 
     # Bloque Próxima carrera (izquierda)
     with col_izq:
@@ -934,9 +1076,10 @@ if menu == "Dashboard":
             box-shadow: 0 6px 32px 0 rgba(0,0,0,0.18), 0 1.5px 8px 0 #00eaff33;
             padding: 28px 22px 22px 22px;
             margin-bottom: 22px;
-            min-height: 260px;
-            max-width: 370px;
-            border: 2.5px solid #00eaff44;
+            min-height: 300px;
+            width: 100%;
+            max-width: none;
+            border: 1px solid #00eaff44;
             position: relative;
             margin-left: auto;
             margin-right: auto;
@@ -950,7 +1093,7 @@ if menu == "Dashboard":
             background: linear-gradient(90deg, #00eaff 0%, #0055ff 100%);
             color: #fff;
             border-radius: 14px 14px 0 0;
-            font-size: 2.1rem;
+            font-size: 1.65rem;
             font-weight: 800;
             letter-spacing: 1.5px;
             text-align: center;
@@ -1125,28 +1268,37 @@ if menu == "Dashboard":
                     piloto_sel = pilotos[pilotos["id"] == piloto_id].iloc[0]
 
                     img_path = _get_piloto_image_path(piloto_sel["codigo"])
+                    _driver_img_html = ""
                     if img_path:
-                        st.image(img_path, width=180)
+                        _driver_bytes = Path(img_path).read_bytes()
+                        _driver_b64 = _b64.b64encode(_driver_bytes).decode("ascii")
+                        _driver_mime = {
+                            ".avif": "image/avif",
+                            ".png": "image/png",
+                            ".webp": "image/webp",
+                        }.get(Path(img_path).suffix.lower(), "image/jpeg")
+                        _driver_img_html = (
+                            '<div class="pick-driver-visual">'
+                            f'<img src="data:{_driver_mime};base64,{_driver_b64}" '
+                            f'alt="{piloto_sel["nombre"]}"/>'
+                            '</div>'
+                        )
 
                     st.markdown(f"""
-                    <div style="
-                        background:#222;
-                        padding:24px;
-                        border-radius:12px;
-                        text-align:center;
-                        color:white;
-                        margin-bottom:8px;
-                    ">
-                        <h2 style="margin-bottom:4px;">{piloto_sel['nombre']}</h2>
-                        <p style="margin:0; font-size:0.9rem;">Código: {piloto_sel['codigo']}</p>
-                        <p style="margin:0; font-size:0.9rem;">Escudería: {piloto_sel['escuderia']}</p>
+                    <div class="pick-driver-card">
+                        {_driver_img_html}
+                        <div class="pick-driver-copy">
+                            <div class="pick-driver-kicker">Tu elección para el 5° lugar</div>
+                            <div class="pick-driver-name">{piloto_sel['nombre']}</div>
+                            <div class="pick-driver-meta">{piloto_sel['codigo']} &nbsp;·&nbsp; {piloto_sel['escuderia']}</div>
+                        </div>
                     </div>
                     """, unsafe_allow_html=True)
 
                     if carrera_bloqueada(proxima["inicio"]):
                         st.warning("La carrera ya está bloqueada para picks. No puedes cambiar tu selección.")
                     else:
-                        if st.button("Guardar Pick", key=f"dashboard_guardar_pick_{proxima['id']}"):
+                        if st.button("Guardar pick", key=f"dashboard_guardar_pick_{proxima['id']}", use_container_width=True):
                             crud.guardar_pick(
                                 st.session_state.user_id,
                                 proxima["id"],
@@ -1169,8 +1321,8 @@ if menu == "Dashboard":
                 lista_html = "<br/>".join(items)
                 st.markdown(
                     f"""
-                    <div style="margin-top:4px; font-size:0.85rem; line-height:1.05;">
-                        <b>Five Fives All Time</b><br/>
+                    <div class="top-picks-card">
+                        <div class="top-picks-title">Five Fives All Time</div>
                         {lista_html}
                     </div>
                     """,
@@ -1183,9 +1335,6 @@ if menu == "Dashboard":
     # TABLA GENERAL (STANDINGS + CARRERAS)
     # =========================
     st.subheader("📈 Standings General")
-
-    progreso = crud.progreso_pilotos_temporada(temporada_id)
-    usuarios_puntos = crud.listar_usuarios_con_puntos(temporada_id)
 
     if not progreso.empty:
         # Matriz resumen: filas = usuarios, columnas = carreras, con total al inicio
@@ -2131,4 +2280,3 @@ elif menu == "Bonos":
 
         st.dataframe(df_top, use_container_width=True, hide_index=True)
         st.caption("Top entradas individuales por carrera (puntos en una sola carrera).")
-

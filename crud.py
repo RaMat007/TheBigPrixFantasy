@@ -720,6 +720,66 @@ def obtener_resultados_carrera(carrera_id):
     return rows
 
 
+def importar_resultados_carrera(carrera_id, resultados):
+    """Reemplaza resultados y recalcula puntos dentro de una sola transacción.
+
+    ``resultados`` debe contener pares ``piloto_id``/``posicion`` ya validados.
+    Si cualquier operación falla, la carrera conserva sus datos anteriores.
+    """
+    posiciones = [int(r["posicion"]) for r in resultados]
+    pilotos = [int(r["piloto_id"]) for r in resultados]
+    if not resultados:
+        raise ValueError("No hay resultados para importar.")
+    if len(posiciones) != len(set(posiciones)):
+        raise ValueError("La clasificación contiene posiciones repetidas.")
+    if len(pilotos) != len(set(pilotos)):
+        raise ValueError("La clasificación contiene pilotos repetidos.")
+
+    conn = get_connection()
+    try:
+        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        cur.execute("DELETE FROM resultados WHERE carrera_id = %s", (carrera_id,))
+        cur.executemany(
+            """
+            INSERT INTO resultados (carrera_id, piloto_id, posicion)
+            VALUES (%s, %s, %s)
+            """,
+            [(carrera_id, pid, pos) for pid, pos in zip(pilotos, posiciones)],
+        )
+
+        cur.execute("DELETE FROM puntos WHERE carrera_id = %s", (carrera_id,))
+        cur.execute(
+            """
+            SELECT p.usuario_id, r.posicion
+            FROM picks p
+            LEFT JOIN resultados r
+              ON r.carrera_id = p.carrera_id AND r.piloto_id = p.piloto_id
+            WHERE p.carrera_id = %s
+            """,
+            (carrera_id,),
+        )
+        puntos = [
+            (row["usuario_id"], carrera_id, rules.calcular_puntos(row["posicion"]) if row["posicion"] else 0)
+            for row in cur.fetchall()
+        ]
+        if puntos:
+            cur.executemany(
+                """
+                INSERT INTO puntos (usuario_id, carrera_id, puntos)
+                VALUES (%s, %s, %s)
+                ON CONFLICT (usuario_id, carrera_id)
+                DO UPDATE SET puntos = EXCLUDED.puntos
+                """,
+                puntos,
+            )
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+
+
 def recalcular_puntos_carrera(carrera_id):
     """Recalcula y guarda los puntos de una carrera en base a picks y resultados.
 
