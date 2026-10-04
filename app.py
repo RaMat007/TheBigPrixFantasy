@@ -2222,15 +2222,12 @@ elif menu == "Mi Pick":
 # =========================
 elif menu == "Carreras":
     st.title("🏆 Grand Prixes")
-    if st.session_state.is_admin:
-        with st.expander("Revisión de calendario, picks y puntos"):
-            st.caption("Calendario oficial verificado el 03/10/2026. Los IDs conservan el vínculo de cada elección con su GP. Jeddah permanece archivada y no puntúa.")
-            if st.button("Auditar temporada 2026", key="audit_calendar_2026"):
-                audit = crud.auditar_calendario_temporada(temporada_id)
-                st.dataframe(audit, hide_index=True, use_container_width=True)
-                st.caption("Las alertas requieren revisar los registros originales; esta auditoría no mueve picks ni cambia resultados.")
-
-
+    st.subheader("Revisión del calendario")
+    st.caption("Comprueba las carreras, picks, resultados y puntos de 2026.")
+    if st.button("Auditar temporada 2026", key="audit_calendar_2026"):
+        audit = crud.auditar_calendario_temporada(temporada_id)
+        st.dataframe(audit, hide_index=True, use_container_width=True)
+        st.caption("Las alertas requieren revisar los registros originales; esta auditoría no mueve picks ni cambia resultados.")
 
     carreras = crud.listar_carreras_temporada(temporada_id)
 
