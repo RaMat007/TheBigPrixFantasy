@@ -298,7 +298,7 @@ def actualizar_carreras_desde_f1db(temporada_id, year):
     Empareja por número de round entre quiniela.db y f1db.db.
     """
     detalles = f1db_integration.carreras_detalle_por_round(int(year))
-    if not detalles:
+    if not detalles and int(year) != 2026:
         log.warning(f"No se encontraron datos de F1DB para el año {year}.")
         return
 
@@ -307,7 +307,7 @@ def actualizar_carreras_desde_f1db(temporada_id, year):
 
     cur.execute(
         """
-        SELECT id, round
+        SELECT id, round, nombre
         FROM carreras
         WHERE temporada_id = %s
         """,
@@ -319,6 +319,21 @@ def actualizar_carreras_desde_f1db(temporada_id, year):
         cid = row["id"]
         rnd = row["round"]
         info = detalles.get(int(rnd)) if rnd is not None else None
+        nombre_actualizado = None
+        # F1DB conserva el calendario original: Baréin se trasladó a Sepang.
+        # Conservamos el registro y sus picks; no renumeramos el historial.
+        nombre_actual = str(row.get("nombre") or "").casefold()
+        if int(year) == 2026 and rnd == 4 and any(
+            nombre in nombre_actual for nombre in ("bahr", "baréin", "sepang")
+        ):
+            info = {
+                "track_length_km": 5.543,
+                "laps": 56,
+                "circuit_name": "Sepang International Circuit",
+                "race_date": "2026-10-04",
+                "race_time": "07:00:00",
+            }
+            nombre_actualizado = "Bahréin en Malasia, MYS"
         if not info:
             continue
 
@@ -341,14 +356,15 @@ def actualizar_carreras_desde_f1db(temporada_id, year):
         cur.execute(
             """
             UPDATE carreras
-            SET kms = COALESCE(%s, kms),
+            SET nombre = COALESCE(%s, nombre),
+                kms = COALESCE(%s, kms),
                 vueltas = COALESCE(%s, vueltas),
                 pista = COALESCE(%s, pista),
                 inicio = COALESCE(%s, inicio),
                 hora = COALESCE(%s, hora)
             WHERE id = %s
             """,
-            (kms, vueltas, pista, inicio, hora, cid),
+            (nombre_actualizado, kms, vueltas, pista, inicio, hora, cid),
         )
 
     conn.commit()
