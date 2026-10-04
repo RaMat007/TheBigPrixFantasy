@@ -111,6 +111,13 @@ def init_db():
     cur.execute("ALTER TABLE pilotos ADD COLUMN IF NOT EXISTS foto_url TEXT")
     cur.execute("ALTER TABLE pilotos ADD COLUMN IF NOT EXISTS color_escuderia TEXT")
 
+    # Piloto necesario para clasificaciones históricas. No cambia la alineación activa.
+    cur.execute("""
+        INSERT INTO pilotos (codigo, nombre, activo)
+        VALUES (%s, %s, 0)
+        ON CONFLICT (codigo) DO NOTHING
+    """, ("TSU", "Yuki Tsunoda"))
+
     cur.execute("""
     CREATE TABLE IF NOT EXISTS picks (
         id SERIAL PRIMARY KEY,
@@ -189,4 +196,3 @@ def _seed_admin(cur):
         1,
         datetime.now().isoformat()
     ))
-
