@@ -60,7 +60,7 @@ def audit_race(row, picks, results, points):
             problems.append('Registros archivados de GP cancelado; excluidos de puntuación')
     elif expected:
         if not picks:
-            problems.append('Sin picks históricos; requiere recuperar registros originales')
+            problems.append('Sin picks vinculados a este ID; revisar secuencia temporal y posibles vínculos a otro GP')
         if not results:
             problems.append('Faltan resultados')
         elif tuple(codes.get(i) for i in range(1, 6)) != expected:
@@ -88,7 +88,10 @@ def audit_race(row, picks, results, points):
         except (ValueError, TypeError, AttributeError):
             invalid_times += 1
     if late and not race['cancelada']:
-        problems.append(f'{late} picks manuales posteriores al cierre; revisar')
+        if race['key'] == 'miami':
+            problems.append(f'Revisión posterior: {late} pick(s) manual(es) fuera del cierre corregido, permitido(s) por el administrador')
+        else:
+            problems.append(f'{late} picks manuales posteriores al cierre; revisar')
     if invalid_times:
         problems.append(f'{invalid_times} fechas de picks inválidas')
     if race['key']=='bahrain' and any(p.get('auto_asignado') and p['timestamp'][:10] < '2026-07-26' for p in picks):

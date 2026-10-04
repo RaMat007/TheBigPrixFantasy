@@ -1246,3 +1246,62 @@ def reconciliar_resultados_oficiales_2026(temporada_id):
         conn.close()
     st.cache_data.clear()
     return pd.DataFrame(report)
+
+
+def revisar_secuencia_temporal_picks():
+    """Todos los registros, incluso de otra temporada o GP cancelado, por fecha real."""
+    from datetime import datetime, timezone, timedelta
+    from zoneinfo import ZoneInfo
+    from calendar_2026 import CALENDAR
+    conn = get_connection()
+    try:
+        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        cur.execute("""
+            SELECT p.id, p.usuario_id, u.username, p.piloto_id, pi.codigo,
+                   p.timestamp, p.auto_asignado, p.carrera_id,
+                   c.nombre AS carrera, c.round, c.inicio, c.temporada_id,
+                   t.nombre AS temporada
+            FROM picks p
+            LEFT JOIN usuarios u ON u.id=p.usuario_id
+            LEFT JOIN pilotos pi ON pi.id=p.piloto_id
+            LEFT JOIN carreras c ON c.id=p.carrera_id
+            LEFT JOIN temporadas t ON t.id=c.temporada_id
+            ORDER BY p.timestamp, p.id
+        """)
+        records = cur.fetchall()
+    finally:
+        conn.close()
+    rows = []
+    targets = [CALENDAR[k] for k in ('italy', 'spain', 'azerbaijan')]
+    for p in records:
+        utc = local = day = window = ''
+        try:
+            stamp = datetime.fromisoformat(str(p['timestamp']).replace('Z', '+00:00'))
+            stamp = stamp.replace(tzinfo=timezone.utc) if stamp.tzinfo is None else stamp.astimezone(timezone.utc)
+            utc = stamp.isoformat()
+            mexico = stamp.astimezone(ZoneInfo('America/Mexico_City'))
+            local, day = mexico.isoformat(), mexico.date().isoformat()
+            matches = []
+            for race in targets:
+                start = datetime.fromisoformat(race['inicio']).replace(tzinfo=timezone.utc)
+                if start - timedelta(days=7) <= stamp <= start + timedelta(days=1):
+                    matches.append(race['nombre'])
+            window = ', '.join(matches)
+        except (ValueError, TypeError):
+            day = 'Fecha inválida'
+        rows.append({'Pick ID':p['id'], 'Usuario ID':p['usuario_id'], 'Usuario':p['username'],
+                     'Piloto':p['codigo'], 'Timestamp original':p['timestamp'],
+                     'Registro UTC':utc, 'Registro México':local, 'Día México':day,
+                     'Tipo':'Automático' if p['auto_asignado'] else 'Manual',
+                     'Carrera ID guardada':p['carrera_id'], 'Carrera guardada':p['carrera'],
+                     'Ronda guardada':p['round'], 'Inicio guardado':p['inicio'],
+                     'Temporada ID':p['temporada_id'], 'Temporada':p['temporada'],
+                     'Ventana cercana a GP (referencia)':window})
+    detail = pd.DataFrame(rows)
+    if detail.empty:
+        return detail, detail
+    summary = detail.groupby(['Día México', 'Tipo', 'Carrera ID guardada', 'Carrera guardada'], dropna=False).agg(
+        Picks=('Pick ID', 'count'), Usuarios=('Usuario ID', 'nunique'),
+        Primer_registro_UTC=('Registro UTC', 'min'), Último_registro_UTC=('Registro UTC', 'max')
+    ).reset_index().sort_values(['Día México', 'Tipo', 'Carrera ID guardada'])
+    return summary, detail

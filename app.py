@@ -823,6 +823,14 @@ if menu == "Super Admin" and st.session_state.is_admin:
             st.caption("Revisa los registros vinculados a cada GP. La corrección de resultados conserva todos los picks existentes y crea un respaldo privado.")
             if st.button("Auditar temporada 2026", key="admin_audit_calendar_2026"):
                 st.dataframe(crud.auditar_calendario_temporada(temporada_id), hide_index=True, use_container_width=True)
+            if st.button("Revisar secuencia temporal de picks", key="admin_pick_timeline"):
+                summary, detail = crud.revisar_secuencia_temporal_picks()
+                st.caption("Todos los picks guardados, incluidas otras temporadas y carreras canceladas. Fechas sin zona se interpretan como UTC, igual que al guardar picks. La ventana cercana a un GP es una referencia temporal; no reasigna elecciones.")
+                st.subheader("Picks por fecha y carrera guardada")
+                st.dataframe(summary, hide_index=True, use_container_width=True)
+                st.subheader("Secuencia completa de registros")
+                st.dataframe(detail, hide_index=True, use_container_width=True)
+                st.download_button("Descargar secuencia de picks CSV", detail.to_csv(index=False).encode('utf-8-sig'), "secuencia_picks.csv", "text/csv")
             st.caption("Clasificaciones de los 15 GP disputados verificadas contra Formula1.com al 03/10/2026. Recalcula puntos sin crear picks para carreras pasadas ni alterar elecciones manuales.")
             if st.button("Actualizar resultados oficiales y recalcular puntos", key="reconcile_results_2026"):
                 try:
