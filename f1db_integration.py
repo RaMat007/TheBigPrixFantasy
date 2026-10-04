@@ -24,6 +24,10 @@ def carreras_detalle_por_round(year: int) -> Dict[int, Dict[str, Any]]:
 
     Si no hay datos o falla la conexión, devuelve dict vacío.
     """
+    if int(year) == 2026:
+        from calendar_2026 import circuit_details
+        return circuit_details()
+
     try:
         conn = _get_f1db_connection()
     except FileNotFoundError:
@@ -68,3 +72,4 @@ def carreras_detalle_por_round(year: int) -> Dict[int, Dict[str, Any]]:
         }
 
     return detalle
+

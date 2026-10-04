@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from db import get_connection
 import pandas as pd
 import hashlib
@@ -222,7 +222,7 @@ def listar_carreras_temporada(temporada_id):
     df = pd.read_sql_query("""
         SELECT *
         FROM carreras
-        WHERE temporada_id = %s
+        WHERE temporada_id = %s AND NOT cancelada
         ORDER BY round
     """, conn, params=(temporada_id,))
     conn.close()
@@ -245,10 +245,10 @@ def obtener_proxima_carrera(temporada_id):
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     cur.execute("""
         SELECT * FROM carreras
-        WHERE temporada_id = %s AND inicio > %s
+        WHERE temporada_id = %s AND NOT cancelada AND inicio > %s
         ORDER BY inicio ASC
         LIMIT 1
-    """, (temporada_id, datetime.now().isoformat()))
+    """, (temporada_id, datetime.now(timezone.utc).replace(tzinfo=None).isoformat()))
     row = cur.fetchone()
     conn.close()
     return row
@@ -293,12 +293,24 @@ def countdown(inicio):
 
 
 def actualizar_carreras_desde_f1db(temporada_id, year):
-    """Actualiza kms, vueltas y pista de todas las carreras de una temporada usando F1DB.
+    """2026 usa identidad del GP; otras temporadas conservan la integración F1DB."""
+    if int(year) == 2026:
+        from calendar_2026 import apply_calendar
+        conn = get_connection()
+        try:
+            changed = apply_calendar(conn, temporada_id)
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+        finally:
+            conn.close()
+        if changed:
+            st.cache_data.clear()
+        return
 
-    Empareja por número de round entre quiniela.db y f1db.db.
-    """
     detalles = f1db_integration.carreras_detalle_por_round(int(year))
-    if not detalles and int(year) != 2026:
+    if not detalles:
         log.warning(f"No se encontraron datos de F1DB para el año {year}.")
         return
 
@@ -320,20 +332,6 @@ def actualizar_carreras_desde_f1db(temporada_id, year):
         rnd = row["round"]
         info = detalles.get(int(rnd)) if rnd is not None else None
         nombre_actualizado = None
-        # F1DB conserva el calendario original: Baréin se trasladó a Sepang.
-        # Conservamos el registro y sus picks; no renumeramos el historial.
-        nombre_actual = str(row.get("nombre") or "").casefold()
-        if int(year) == 2026 and rnd == 4 and any(
-            nombre in nombre_actual for nombre in ("bahr", "baréin", "sepang")
-        ):
-            info = {
-                "track_length_km": 5.543,
-                "laps": 56,
-                "circuit_name": "Sepang International Circuit",
-                "race_date": "2026-10-04",
-                "race_time": "07:00:00",
-            }
-            nombre_actualizado = "Bahréin en Malasia, MYS"
         if not info:
             continue
 
@@ -509,7 +507,7 @@ def guardar_pick(usuario_id, carrera_id, piloto_id):
         DO UPDATE SET piloto_id = EXCLUDED.piloto_id,
                       timestamp = EXCLUDED.timestamp,
                       auto_asignado = 0
-    """, (usuario_id, carrera_id, piloto_id, datetime.now().isoformat()))
+    """, (usuario_id, carrera_id, piloto_id, datetime.now(timezone.utc).replace(tzinfo=None).isoformat()))
     conn.commit()
     conn.close()
     # Invalidar caches afectados
@@ -559,14 +557,14 @@ def top_picks_global(temporada_id, limit=10):
         SELECT
             pl.codigo AS piloto_codigo,
             pl.nombre AS piloto_nombre,
-            COUNT(p.id) AS pick_count
+            COUNT(c.id) AS pick_count
         FROM pilotos pl
         LEFT JOIN picks p
             ON p.piloto_id = pl.id
         LEFT JOIN carreras c
             ON c.id = p.carrera_id
-           AND c.temporada_id = %s
-        WHERE c.id IS NULL OR EXISTS (
+           AND c.temporada_id = %s AND NOT c.cancelada
+           AND EXISTS (
             SELECT 1 FROM resultados r WHERE r.carrera_id = c.id
         )
         GROUP BY pl.id, pl.codigo, pl.nombre
@@ -655,7 +653,7 @@ def historial_picks_usuario(usuario_id, temporada_id):
             ON pt.carrera_id = p.carrera_id
            AND pt.usuario_id = p.usuario_id
         WHERE p.usuario_id = %s
-          AND c.temporada_id = %s
+          AND c.temporada_id = %s AND NOT c.cancelada
         ORDER BY c.round ASC
         """,
         conn,
@@ -675,7 +673,7 @@ def auto_pilotos_por_temporada(temporada_id: int) -> dict:
         SELECT c.round, pl.codigo
         FROM carreras c
         JOIN pilotos pl ON pl.id = c.auto_piloto_id
-        WHERE c.temporada_id = %s AND c.auto_piloto_id IS NOT NULL
+        WHERE c.temporada_id = %s AND NOT c.cancelada AND c.auto_piloto_id IS NOT NULL
         """,
         (temporada_id,),
     )
@@ -710,7 +708,7 @@ def historial_picks_temporada(temporada_id):
         LEFT JOIN puntos pt
             ON pt.carrera_id = p.carrera_id
            AND pt.usuario_id = p.usuario_id
-        WHERE c.temporada_id = %s
+        WHERE c.temporada_id = %s AND NOT c.cancelada
         ORDER BY c.round ASC, u.username ASC
         """,
         conn,
@@ -907,7 +905,7 @@ def leaderboard_temporada(temporada_id):
         JOIN resultados r 
             ON r.carrera_id = p.carrera_id
            AND r.piloto_id = p.piloto_id
-        WHERE c.temporada_id = %s
+        WHERE c.temporada_id = %s AND NOT c.cancelada
     """, conn, params=(temporada_id,))
     conn.close()
 
@@ -962,7 +960,7 @@ def leaderboard_temporada(temporada_id):
         FROM puntos pt
         JOIN usuarios u ON u.id = pt.usuario_id
         JOIN carreras c ON c.id = pt.carrera_id
-        WHERE c.temporada_id = %s
+        WHERE c.temporada_id = %s AND NOT c.cancelada
           AND u.is_admin = 0
         GROUP BY u.id
         ORDER BY total_puntos DESC
@@ -990,7 +988,7 @@ def progreso_pilotos_temporada(temporada_id):
                 FROM puntos pt
                 JOIN usuarios u ON u.id = pt.usuario_id
                 JOIN carreras c ON c.id = pt.carrera_id
-                WHERE c.temporada_id = %s
+                WHERE c.temporada_id = %s AND NOT c.cancelada
                     AND u.is_admin = 0
         ORDER BY c.round, u.username
         """,
@@ -1029,7 +1027,7 @@ def detalle_carrera(temporada_id, carrera_id):
             ON pt.carrera_id = p.carrera_id
            AND pt.usuario_id = p.usuario_id
         WHERE p.carrera_id = %s
-          AND c.temporada_id = %s
+          AND c.temporada_id = %s AND NOT c.cancelada
         ORDER BY puntos DESC, u.username ASC
         """,
         conn,
@@ -1076,7 +1074,7 @@ def mejores_carreras_temporada(temporada_id, limit=10):
         FROM puntos pt
         JOIN usuarios u ON u.id = pt.usuario_id AND u.is_admin = 0
         JOIN carreras c ON c.id = pt.carrera_id
-        WHERE c.temporada_id = %s
+        WHERE c.temporada_id = %s AND NOT c.cancelada
         ORDER BY pt.puntos DESC, c.round ASC
         LIMIT %s
         """,
@@ -1113,23 +1111,23 @@ def sincronizar_auto_picks_temporada(temporada_id: int):
     # Sólo asignar a la próxima carrera pendiente sin auto_piloto_id
     cur.execute(
         """
-        SELECT c.id FROM carreras c
-        WHERE c.temporada_id = %s AND c.auto_piloto_id IS NULL
+        SELECT c.id, c.auto_piloto_id, c.inicio FROM carreras c
+        WHERE c.temporada_id = %s AND NOT c.cancelada AND c.inicio > %s
           AND NOT EXISTS (SELECT 1 FROM resultados r WHERE r.carrera_id = c.id)
-        ORDER BY c.round ASC LIMIT 1
+        ORDER BY c.inicio ASC LIMIT 1
         """,
-        (temporada_id,),
+        (temporada_id, datetime.now(timezone.utc).replace(tzinfo=None).isoformat()),
     )
     proxima_row = cur.fetchone()
-    if proxima_row:
+    if proxima_row and not proxima_row["auto_piloto_id"]:
         proxima_cid = proxima_row["id"]
         # Solo excluir pilotos ya usados como auto-pick en otras carreras de la temporada
         cur.execute(
-            "SELECT auto_piloto_id FROM carreras WHERE temporada_id = %s AND auto_piloto_id IS NOT NULL",
-            (temporada_id,),
+            "SELECT auto_piloto_id FROM carreras WHERE temporada_id = %s AND NOT cancelada AND inicio < %s AND auto_piloto_id IS NOT NULL",
+            (temporada_id, proxima_row["inicio"]),
         )
         usados = {r["auto_piloto_id"] for r in cur.fetchall()}
-        cur.execute("SELECT id FROM pilotos ORDER BY id")
+        cur.execute("SELECT id FROM pilotos WHERE activo = 1 ORDER BY id")
         todos = [r["id"] for r in cur.fetchall()]
         disponibles = [p for p in todos if p not in usados] or todos
         auto_piloto = random.choice(disponibles)
@@ -1151,7 +1149,7 @@ def auto_asignar_picks_faltantes(carrera_id: int, primer_piloto_id: int):
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
 
     # Obtener el auto_piloto_id ya calculado por sincronizar_auto_picks_temporada
-    cur.execute("SELECT auto_piloto_id FROM carreras WHERE id = %s", (carrera_id,))
+    cur.execute("SELECT auto_piloto_id FROM carreras WHERE id = %s AND NOT cancelada", (carrera_id,))
     row = cur.fetchone()
     auto_piloto = row["auto_piloto_id"] if row else None
 
@@ -1201,7 +1199,7 @@ def listar_usuarios_con_puntos(temporada_id: int):
         LEFT JOIN (
             SELECT pt.usuario_id, pt.puntos
             FROM puntos pt
-            JOIN carreras c ON c.id = pt.carrera_id AND c.temporada_id = %s
+            JOIN carreras c ON c.id = pt.carrera_id AND c.temporada_id = %s AND NOT c.cancelada
         ) sub ON sub.usuario_id = u.id
         WHERE u.is_admin = 0
         GROUP BY u.id, u.username, u.escuderia, u.foto_perfil
@@ -1212,3 +1210,24 @@ def listar_usuarios_con_puntos(temporada_id: int):
     )
     conn.close()
     return df
+
+
+
+def auditar_calendario_temporada(temporada_id):
+    """Lee vínculos reales por carrera_id y compara resultados y puntos."""
+    from calendar_2026 import audit_race
+    conn = get_connection()
+    try:
+        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        cur.execute("SELECT * FROM carreras WHERE temporada_id=%s ORDER BY cancelada, round", (temporada_id,))
+        races = cur.fetchall()
+        cur.execute("SELECT p.* FROM picks p JOIN carreras c ON c.id=p.carrera_id WHERE c.temporada_id=%s", (temporada_id,))
+        picks = cur.fetchall()
+        cur.execute("SELECT r.*, pi.codigo FROM resultados r JOIN pilotos pi ON pi.id=r.piloto_id JOIN carreras c ON c.id=r.carrera_id WHERE c.temporada_id=%s", (temporada_id,))
+        results = cur.fetchall()
+        cur.execute("SELECT p.* FROM puntos p JOIN carreras c ON c.id=p.carrera_id WHERE c.temporada_id=%s", (temporada_id,))
+        points = cur.fetchall()
+        report = [audit_race(r, [p for p in picks if p['carrera_id']==r['id']], [p for p in results if p['carrera_id']==r['id']], [p for p in points if p['carrera_id']==r['id']]) for r in races]
+        return pd.DataFrame(report)
+    finally:
+        conn.close()

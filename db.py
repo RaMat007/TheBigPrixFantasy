@@ -91,6 +91,8 @@ def init_db():
     cur.execute("ALTER TABLE carreras ADD COLUMN IF NOT EXISTS auto_piloto_id INTEGER")
     cur.execute("ALTER TABLE carreras ADD COLUMN IF NOT EXISTS pista TEXT")
     cur.execute("ALTER TABLE carreras ADD COLUMN IF NOT EXISTS hora TEXT")
+    cur.execute("ALTER TABLE carreras ADD COLUMN IF NOT EXISTS calendario_key TEXT")
+    cur.execute("ALTER TABLE carreras ADD COLUMN IF NOT EXISTS cancelada BOOLEAN NOT NULL DEFAULT FALSE")
     cur.execute("ALTER TABLE picks ADD COLUMN IF NOT EXISTS auto_asignado INTEGER DEFAULT 0")
 
     cur.execute("""
@@ -187,3 +189,4 @@ def _seed_admin(cur):
         1,
         datetime.now().isoformat()
     ))
+
