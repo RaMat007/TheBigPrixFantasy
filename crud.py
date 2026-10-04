@@ -207,11 +207,7 @@ def obtener_temporada_activa():
 # CARRERAS
 # =========================
 def crear_carrera(temporada_id, round_num, nombre, inicio, kms=None, vueltas=None, pista=None, hora=None):
-    if len(inicio) <= 10:
-        if not hora:
-            raise ValueError('Indica la hora de inicio del GP en UTC.')
-        inicio = inicio[:10] + 'T' + hora
-    conn = _backup_connection('Antes de crear carrera')
+    conn = get_connection()
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     cur.execute("""
         INSERT INTO carreras (temporada_id, round, nombre, inicio, kms, vueltas, pista, hora)
@@ -258,9 +254,7 @@ def obtener_proxima_carrera(temporada_id):
     return row
 
 def editar_carrera(carrera_id, round_num, nombre, inicio, kms=None, vueltas=None, pista=None, hora=None):
-    if len(inicio) <= 10 and hora:
-        inicio = inicio[:10] + 'T' + hora
-    conn = _backup_connection('Antes de editar carrera')
+    conn = get_connection()
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
 
     cur.execute("""
@@ -273,7 +267,7 @@ def editar_carrera(carrera_id, round_num, nombre, inicio, kms=None, vueltas=None
     conn.close()
 
 def eliminar_carrera(carrera_id):
-    conn = _backup_connection('Antes de eliminar carrera')
+    conn = get_connection()
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     cur.execute("""
         DELETE FROM carreras
@@ -302,7 +296,7 @@ def actualizar_carreras_desde_f1db(temporada_id, year):
     """2026 usa identidad del GP; otras temporadas conservan la integración F1DB."""
     if int(year) == 2026:
         from calendar_2026 import apply_calendar
-        conn = _backup_connection('Antes de sincronizar calendario revisado')
+        conn = get_connection()
         try:
             changed = apply_calendar(conn, temporada_id)
             conn.commit()
@@ -503,26 +497,21 @@ def aplicar_alineacion_pilotos(alineacion):
 # PICKS
 # =========================
 def guardar_pick(usuario_id, carrera_id, piloto_id):
-    conn = _backup_connection(f'Antes de guardar pick del usuario {usuario_id} en GP {carrera_id}')
-    try:
-        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-        cur.execute('SELECT id FROM pilotos WHERE id=%s AND activo=1', (piloto_id,))
-        if not cur.fetchone():
-            raise ValueError('El piloto no está activo en la alineación.')
-        cur.execute("""
-            INSERT INTO picks(usuario_id,carrera_id,piloto_id,timestamp,auto_asignado)
-            VALUES(%s,%s,%s,%s,0)
-            ON CONFLICT(usuario_id,carrera_id) DO UPDATE SET piloto_id=EXCLUDED.piloto_id,
-                timestamp=EXCLUDED.timestamp,auto_asignado=0
-        """, (usuario_id,carrera_id,piloto_id,datetime.now(timezone.utc).replace(tzinfo=None).isoformat()))
-        conn.commit()
-    except Exception:
-        conn.rollback()
-        raise
-    finally:
-        conn.close()
+    conn = get_connection()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cur.execute("""
+        INSERT INTO picks
+        (usuario_id, carrera_id, piloto_id, timestamp, auto_asignado)
+        VALUES (%s, %s, %s, %s, 0)
+        ON CONFLICT (usuario_id, carrera_id)
+        DO UPDATE SET piloto_id = EXCLUDED.piloto_id,
+                      timestamp = EXCLUDED.timestamp,
+                      auto_asignado = 0
+    """, (usuario_id, carrera_id, piloto_id, datetime.now(timezone.utc).replace(tzinfo=None).isoformat()))
+    conn.commit()
+    conn.close()
+    # Invalidar caches afectados
     st.cache_data.clear()
-
 
 def obtener_pick_usuario(usuario_id, carrera_id):
     conn = get_connection()
@@ -732,7 +721,7 @@ def historial_picks_temporada(temporada_id):
 # RESULTADOS
 # =========================
 def borrar_resultados_carrera(carrera_id):
-    conn = _backup_connection('Antes de borrar resultados')
+    conn = get_connection()
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     cur.execute("""
         DELETE FROM resultados
@@ -742,7 +731,7 @@ def borrar_resultados_carrera(carrera_id):
     conn.close()
 
 def guardar_resultado(carrera_id, piloto_id, posicion):
-    conn = _backup_connection('Antes de guardar resultado')
+    conn = get_connection()
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     cur.execute("""
         INSERT INTO resultados (carrera_id, piloto_id, posicion)
@@ -816,7 +805,7 @@ def importar_resultados_carrera(carrera_id, resultados):
     if len(pilotos) != len(set(pilotos)):
         raise ValueError("La clasificación contiene pilotos repetidos.")
 
-    conn = _backup_connection('Antes de importar resultados')
+    conn = get_connection()
     try:
         cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
         cur.execute("DELETE FROM resultados WHERE carrera_id = %s", (carrera_id,))
@@ -862,24 +851,45 @@ def importar_resultados_carrera(carrera_id, resultados):
 
 
 def recalcular_puntos_carrera(carrera_id):
-    conn = _backup_connection(f'Antes de recalcular puntos del GP {carrera_id}')
-    try:
-        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-        cur.execute("""SELECT p.usuario_id,r.posicion FROM picks p LEFT JOIN resultados r
-          ON r.carrera_id=p.carrera_id AND r.piloto_id=p.piloto_id WHERE p.carrera_id=%s""", (carrera_id,))
-        rows = cur.fetchall()
-        cur.execute('DELETE FROM puntos WHERE carrera_id=%s', (carrera_id,))
-        if rows:
-            cur.executemany('INSERT INTO puntos(usuario_id,carrera_id,puntos) VALUES(%s,%s,%s)',
-                [(r['usuario_id'],carrera_id,rules.calcular_puntos(r['posicion'])) for r in rows])
-        conn.commit()
-    except Exception:
-        conn.rollback()
-        raise
-    finally:
-        conn.close()
-    st.cache_data.clear()
+    """Recalcula y guarda los puntos de una carrera en base a picks y resultados.
 
+    Regla actual (juego 5º lugar):
+    - Se toma la posición real del piloto pickeado.
+    - Se pasan esos datos a rules.calcular_puntos(posicion_real).
+    - Si no hay resultado para ese piloto, otorga 0 puntos.
+    """
+
+    # Obtener todos los picks de la carrera con su posición real (si existe)
+    conn = get_connection()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cur.execute(
+        """
+        SELECT p.usuario_id, r.posicion
+        FROM picks p
+        LEFT JOIN resultados r
+            ON r.carrera_id = p.carrera_id
+           AND r.piloto_id = p.piloto_id
+        WHERE p.carrera_id = %s
+        """,
+        (carrera_id,),
+    )
+    rows = cur.fetchall()
+    conn.close()
+
+    # Borrar puntos previos de esa carrera
+    borrar_puntos_carrera(carrera_id)
+
+    # Calcular y guardar puntos por usuario
+    for row in rows:
+        usuario_id = row["usuario_id"]
+        posicion_real = row["posicion"]
+
+        if posicion_real is None:
+            puntos = 0
+        else:
+            puntos = rules.calcular_puntos(posicion_real)
+
+        guardar_puntos(usuario_id, carrera_id, puntos)
 
 def leaderboard_temporada(temporada_id):
     conn = get_connection()
@@ -1077,7 +1087,7 @@ def mejores_carreras_temporada(temporada_id, limit=10):
 
 def set_auto_piloto_carrera(carrera_id: int, piloto_id: int):
     """Permite que el admin marque manualmente el piloto auto-asignado de una carrera."""
-    conn = _backup_connection('Antes de cambiar respaldo automático')
+    conn = get_connection()
     cur = conn.cursor()
     cur.execute(
         "UPDATE carreras SET auto_piloto_id = %s WHERE id = %s",
@@ -1088,13 +1098,93 @@ def set_auto_piloto_carrera(carrera_id: int, piloto_id: int):
 
 
 def sincronizar_auto_picks_temporada(temporada_id: int):
-    return mantenimiento_temporada(temporada_id)
+    """
+    Asigna auto_piloto_id SOLO a la próxima carrera pendiente (sin resultados y sin marca).
+    El piloto se elige al azar evitando los ya usados en carreras anteriores.
+    Es idempotente: si ya tiene auto_piloto_id asignado, no hace nada.
+    Las carreras pasadas sin marca se dejan vacías (el admin las marca manualmente).
+    """
+    import random
+    conn = get_connection()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+
+    # Sólo asignar a la próxima carrera pendiente sin auto_piloto_id
+    cur.execute(
+        """
+        SELECT c.id, c.auto_piloto_id, c.inicio FROM carreras c
+        WHERE c.temporada_id = %s AND NOT c.cancelada AND c.inicio > %s
+          AND NOT EXISTS (SELECT 1 FROM resultados r WHERE r.carrera_id = c.id)
+        ORDER BY c.inicio ASC LIMIT 1
+        """,
+        (temporada_id, datetime.now(timezone.utc).replace(tzinfo=None).isoformat()),
+    )
+    proxima_row = cur.fetchone()
+    if proxima_row and not proxima_row["auto_piloto_id"]:
+        proxima_cid = proxima_row["id"]
+        # Solo excluir pilotos ya usados como auto-pick en otras carreras de la temporada
+        cur.execute(
+            "SELECT auto_piloto_id FROM carreras WHERE temporada_id = %s AND NOT cancelada AND inicio < %s AND auto_piloto_id IS NOT NULL",
+            (temporada_id, proxima_row["inicio"]),
+        )
+        usados = {r["auto_piloto_id"] for r in cur.fetchall()}
+        cur.execute("SELECT id FROM pilotos WHERE activo = 1 ORDER BY id")
+        todos = [r["id"] for r in cur.fetchall()]
+        disponibles = [p for p in todos if p not in usados] or todos
+        auto_piloto = random.choice(disponibles)
+        cur.execute(
+            "UPDATE carreras SET auto_piloto_id = %s WHERE id = %s",
+            (auto_piloto, proxima_cid),
+        )
+
+    conn.commit()
+    conn.close()
 
 
 def auto_asignar_picks_faltantes(carrera_id: int, primer_piloto_id: int):
-    race = obtener_carrera(carrera_id)
-    if race:
-        return mantenimiento_temporada(race['temporada_id'])
+    """
+    Asigna el piloto auto-asignado (guardado en carreras.auto_piloto_id) a todos
+    los usuarios no-admin que no tienen pick en esta carrera.
+    """
+    conn = get_connection()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+
+    # Obtener el auto_piloto_id ya calculado por sincronizar_auto_picks_temporada
+    cur.execute("SELECT auto_piloto_id FROM carreras WHERE id = %s AND NOT cancelada", (carrera_id,))
+    row = cur.fetchone()
+    auto_piloto = row["auto_piloto_id"] if row else None
+
+    if not auto_piloto:
+        conn.close()
+        return
+
+    # Usuarios sin pick en esta carrera
+    cur.execute(
+        """
+        SELECT u.id FROM usuarios u
+        WHERE u.is_admin = 0
+          AND NOT EXISTS (
+              SELECT 1 FROM picks p
+              WHERE p.usuario_id = u.id AND p.carrera_id = %s
+          )
+        ORDER BY u.id
+        """,
+        (carrera_id,),
+    )
+    usuarios_sin_pick = [r["id"] for r in cur.fetchall()]
+
+    now = datetime.now().isoformat()
+    for uid in usuarios_sin_pick:
+        cur.execute(
+            """
+            INSERT INTO picks (usuario_id, carrera_id, piloto_id, timestamp, auto_asignado)
+            VALUES (%s, %s, %s, %s, 1)
+            ON CONFLICT (usuario_id, carrera_id) DO NOTHING
+            """,
+            (uid, carrera_id, auto_piloto, now),
+        )
+
+    conn.commit()
+    conn.close()
 
 
 @st.cache_data(ttl=60)
@@ -1131,16 +1221,8 @@ def auditar_calendario_temporada(temporada_id):
         cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
         cur.execute("SELECT * FROM carreras WHERE temporada_id=%s ORDER BY cancelada, round", (temporada_id,))
         races = cur.fetchall()
-        cur.execute("SELECT carrera_id FROM result_sync WHERE status IN ('Importado','Verificado')")
-        verified = {r['carrera_id'] for r in cur.fetchall()}
-        for race in races:
-            race['result_source_verified'] = race['id'] in verified
         cur.execute("SELECT p.* FROM picks p JOIN carreras c ON c.id=p.carrera_id WHERE c.temporada_id=%s", (temporada_id,))
         picks = cur.fetchall()
-        cur.execute('SELECT * FROM pick_reviews')
-        reviews = {r['pick_id']:r for r in cur.fetchall()}
-        for pick in picks:
-            pick['revision'] = reviews.get(pick['id'])
         cur.execute("SELECT r.*, pi.codigo FROM resultados r JOIN pilotos pi ON pi.id=r.piloto_id JOIN carreras c ON c.id=r.carrera_id WHERE c.temporada_id=%s", (temporada_id,))
         results = cur.fetchall()
         cur.execute("SELECT p.* FROM puntos p JOIN carreras c ON c.id=p.carrera_id WHERE c.temporada_id=%s", (temporada_id,))
@@ -1153,7 +1235,7 @@ def auditar_calendario_temporada(temporada_id):
 
 def reconciliar_resultados_oficiales_2026(temporada_id):
     from reconcile_results_2026 import reconcile
-    conn = _backup_connection('Antes de reconciliar resultados oficiales de 2026')
+    conn = get_connection()
     try:
         report = reconcile(conn, temporada_id)
         conn.commit()
@@ -1223,72 +1305,3 @@ def revisar_secuencia_temporal_picks():
         Primer_registro_UTC=('Registro UTC', 'min'), Último_registro_UTC=('Registro UTC', 'max')
     ).reset_index().sort_values(['Día México', 'Tipo', 'Carrera ID guardada'])
     return summary, detail
-
-
-def actor_actual():
-    try:
-        return str(st.session_state.get('username') or 'Administrador')
-    except Exception:
-        return 'Sistema'
-
-
-def _backup_connection(reason):
-    from operations import create_backup, context
-    conn = get_connection()
-    try:
-        context(conn, actor_actual(), reason)
-        create_backup(conn, reason, actor_actual())
-        return conn
-    except Exception:
-        conn.rollback()
-        conn.close()
-        raise
-
-
-def ops_read(sql, params=()):
-    conn = get_connection()
-    try:
-        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-        cur.execute(sql, params)
-        return cur.fetchall()
-    finally:
-        conn.close()
-
-
-def ops_write(function, *args, **kwargs):
-    from operations import context
-    conn = get_connection()
-    try:
-        context(conn, actor_actual())
-        result = function(conn, *args, **kwargs)
-        conn.commit()
-    except Exception:
-        conn.rollback()
-        raise
-    finally:
-        conn.close()
-    st.cache_data.clear()
-    return result
-
-
-def mantenimiento_temporada(season_id):
-    from operations import maintain
-    return ops_write(maintain, season_id)
-
-
-def guardar_revision_pick(pick_id, status, note):
-    if not note.strip():
-        raise ValueError('La revisión requiere una nota.')
-    def save(conn):
-        from operations import cursor, create_backup
-        create_backup(conn, f'Antes de revisar pick {pick_id}', actor_actual())
-        cur = cursor(conn)
-        cur.execute('INSERT INTO pick_reviews(pick_id,status,note,actor) VALUES(%s,%s,%s,%s) ON CONFLICT(pick_id) DO UPDATE SET status=EXCLUDED.status,note=EXCLUDED.note,actor=EXCLUDED.actor,updated_at=now()', (pick_id,status,note,actor_actual()))
-    return ops_write(save)
-
-
-def guardar_auto_resultados(enabled):
-    def save(conn):
-        from operations import cursor
-        cursor(conn).execute("UPDATE app_settings SET value=%s::jsonb WHERE key='auto_results'", ('true' if enabled else 'false',))
-    return ops_write(save)

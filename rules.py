@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import datetime
 
 
 # =========================
@@ -24,9 +24,8 @@ def calcular_puntos(posicion):
 # =========================
 
 def carrera_bloqueada(fecha_carrera, margen_minutos=15):
-    now = datetime.now(timezone.utc)
+    now = datetime.now()
     fecha_carrera_dt = datetime.fromisoformat(fecha_carrera)
-    fecha_carrera_dt = fecha_carrera_dt.replace(tzinfo=timezone.utc) if fecha_carrera_dt.tzinfo is None else fecha_carrera_dt.astimezone(timezone.utc)
     delta = fecha_carrera_dt - now
     return delta.total_seconds() <= margen_minutos * 60
 
