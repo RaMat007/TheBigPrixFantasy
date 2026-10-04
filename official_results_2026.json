@@ -1,0 +1,1356 @@
+{
+  "verified_at": "2026-10-03",
+  "source": "https://www.formula1.com/en/results/2026/races",
+  "races": {
+    "australia": [
+      {
+        "codigo": "RUS",
+        "posicion": 1
+      },
+      {
+        "codigo": "ANT",
+        "posicion": 2
+      },
+      {
+        "codigo": "LEC",
+        "posicion": 3
+      },
+      {
+        "codigo": "HAM",
+        "posicion": 4
+      },
+      {
+        "codigo": "NOR",
+        "posicion": 5
+      },
+      {
+        "codigo": "VER",
+        "posicion": 6
+      },
+      {
+        "codigo": "BEA",
+        "posicion": 7
+      },
+      {
+        "codigo": "LIN",
+        "posicion": 8
+      },
+      {
+        "codigo": "BOR",
+        "posicion": 9
+      },
+      {
+        "codigo": "GAS",
+        "posicion": 10
+      },
+      {
+        "codigo": "OCO",
+        "posicion": 11
+      },
+      {
+        "codigo": "ALB",
+        "posicion": 12
+      },
+      {
+        "codigo": "LAW",
+        "posicion": 13
+      },
+      {
+        "codigo": "COL",
+        "posicion": 14
+      },
+      {
+        "codigo": "SAI",
+        "posicion": 15
+      },
+      {
+        "codigo": "PER",
+        "posicion": 16
+      },
+      {
+        "codigo": "STR",
+        "posicion": null
+      },
+      {
+        "codigo": "ALO",
+        "posicion": null
+      },
+      {
+        "codigo": "BOT",
+        "posicion": null
+      },
+      {
+        "codigo": "HAD",
+        "posicion": null
+      },
+      {
+        "codigo": "PIA",
+        "posicion": null
+      },
+      {
+        "codigo": "HUL",
+        "posicion": null
+      }
+    ],
+    "china": [
+      {
+        "codigo": "ANT",
+        "posicion": 1
+      },
+      {
+        "codigo": "RUS",
+        "posicion": 2
+      },
+      {
+        "codigo": "HAM",
+        "posicion": 3
+      },
+      {
+        "codigo": "LEC",
+        "posicion": 4
+      },
+      {
+        "codigo": "BEA",
+        "posicion": 5
+      },
+      {
+        "codigo": "GAS",
+        "posicion": 6
+      },
+      {
+        "codigo": "LAW",
+        "posicion": 7
+      },
+      {
+        "codigo": "HAD",
+        "posicion": 8
+      },
+      {
+        "codigo": "SAI",
+        "posicion": 9
+      },
+      {
+        "codigo": "COL",
+        "posicion": 10
+      },
+      {
+        "codigo": "HUL",
+        "posicion": 11
+      },
+      {
+        "codigo": "LIN",
+        "posicion": 12
+      },
+      {
+        "codigo": "BOT",
+        "posicion": 13
+      },
+      {
+        "codigo": "OCO",
+        "posicion": 14
+      },
+      {
+        "codigo": "PER",
+        "posicion": 15
+      },
+      {
+        "codigo": "VER",
+        "posicion": null
+      },
+      {
+        "codigo": "ALO",
+        "posicion": null
+      },
+      {
+        "codigo": "STR",
+        "posicion": null
+      },
+      {
+        "codigo": "PIA",
+        "posicion": null
+      },
+      {
+        "codigo": "NOR",
+        "posicion": null
+      },
+      {
+        "codigo": "BOR",
+        "posicion": null
+      },
+      {
+        "codigo": "ALB",
+        "posicion": null
+      }
+    ],
+    "japan": [
+      {
+        "codigo": "ANT",
+        "posicion": 1
+      },
+      {
+        "codigo": "PIA",
+        "posicion": 2
+      },
+      {
+        "codigo": "LEC",
+        "posicion": 3
+      },
+      {
+        "codigo": "RUS",
+        "posicion": 4
+      },
+      {
+        "codigo": "NOR",
+        "posicion": 5
+      },
+      {
+        "codigo": "HAM",
+        "posicion": 6
+      },
+      {
+        "codigo": "GAS",
+        "posicion": 7
+      },
+      {
+        "codigo": "VER",
+        "posicion": 8
+      },
+      {
+        "codigo": "LAW",
+        "posicion": 9
+      },
+      {
+        "codigo": "OCO",
+        "posicion": 10
+      },
+      {
+        "codigo": "HUL",
+        "posicion": 11
+      },
+      {
+        "codigo": "HAD",
+        "posicion": 12
+      },
+      {
+        "codigo": "BOR",
+        "posicion": 13
+      },
+      {
+        "codigo": "LIN",
+        "posicion": 14
+      },
+      {
+        "codigo": "SAI",
+        "posicion": 15
+      },
+      {
+        "codigo": "COL",
+        "posicion": 16
+      },
+      {
+        "codigo": "PER",
+        "posicion": 17
+      },
+      {
+        "codigo": "ALO",
+        "posicion": 18
+      },
+      {
+        "codigo": "BOT",
+        "posicion": 19
+      },
+      {
+        "codigo": "ALB",
+        "posicion": 20
+      },
+      {
+        "codigo": "STR",
+        "posicion": null
+      },
+      {
+        "codigo": "BEA",
+        "posicion": null
+      }
+    ],
+    "miami": [
+      {
+        "codigo": "ANT",
+        "posicion": 1
+      },
+      {
+        "codigo": "NOR",
+        "posicion": 2
+      },
+      {
+        "codigo": "PIA",
+        "posicion": 3
+      },
+      {
+        "codigo": "RUS",
+        "posicion": 4
+      },
+      {
+        "codigo": "VER",
+        "posicion": 5
+      },
+      {
+        "codigo": "HAM",
+        "posicion": 6
+      },
+      {
+        "codigo": "COL",
+        "posicion": 7
+      },
+      {
+        "codigo": "LEC",
+        "posicion": 8
+      },
+      {
+        "codigo": "SAI",
+        "posicion": 9
+      },
+      {
+        "codigo": "ALB",
+        "posicion": 10
+      },
+      {
+        "codigo": "BEA",
+        "posicion": 11
+      },
+      {
+        "codigo": "BOR",
+        "posicion": 12
+      },
+      {
+        "codigo": "OCO",
+        "posicion": 13
+      },
+      {
+        "codigo": "LIN",
+        "posicion": 14
+      },
+      {
+        "codigo": "ALO",
+        "posicion": 15
+      },
+      {
+        "codigo": "PER",
+        "posicion": 16
+      },
+      {
+        "codigo": "STR",
+        "posicion": 17
+      },
+      {
+        "codigo": "BOT",
+        "posicion": 18
+      },
+      {
+        "codigo": "HUL",
+        "posicion": null
+      },
+      {
+        "codigo": "LAW",
+        "posicion": null
+      },
+      {
+        "codigo": "GAS",
+        "posicion": null
+      },
+      {
+        "codigo": "HAD",
+        "posicion": null
+      }
+    ],
+    "canada": [
+      {
+        "codigo": "ANT",
+        "posicion": 1
+      },
+      {
+        "codigo": "HAM",
+        "posicion": 2
+      },
+      {
+        "codigo": "VER",
+        "posicion": 3
+      },
+      {
+        "codigo": "LEC",
+        "posicion": 4
+      },
+      {
+        "codigo": "HAD",
+        "posicion": 5
+      },
+      {
+        "codigo": "COL",
+        "posicion": 6
+      },
+      {
+        "codigo": "LAW",
+        "posicion": 7
+      },
+      {
+        "codigo": "GAS",
+        "posicion": 8
+      },
+      {
+        "codigo": "SAI",
+        "posicion": 9
+      },
+      {
+        "codigo": "BEA",
+        "posicion": 10
+      },
+      {
+        "codigo": "PIA",
+        "posicion": 11
+      },
+      {
+        "codigo": "HUL",
+        "posicion": 12
+      },
+      {
+        "codigo": "BOR",
+        "posicion": 13
+      },
+      {
+        "codigo": "OCO",
+        "posicion": 14
+      },
+      {
+        "codigo": "STR",
+        "posicion": 15
+      },
+      {
+        "codigo": "BOT",
+        "posicion": 16
+      },
+      {
+        "codigo": "PER",
+        "posicion": null
+      },
+      {
+        "codigo": "NOR",
+        "posicion": null
+      },
+      {
+        "codigo": "RUS",
+        "posicion": null
+      },
+      {
+        "codigo": "ALO",
+        "posicion": null
+      },
+      {
+        "codigo": "ALB",
+        "posicion": null
+      },
+      {
+        "codigo": "LIN",
+        "posicion": null
+      }
+    ],
+    "monaco": [
+      {
+        "codigo": "ANT",
+        "posicion": 1
+      },
+      {
+        "codigo": "HAM",
+        "posicion": 2
+      },
+      {
+        "codigo": "HAD",
+        "posicion": 3
+      },
+      {
+        "codigo": "PIA",
+        "posicion": 4
+      },
+      {
+        "codigo": "LAW",
+        "posicion": 5
+      },
+      {
+        "codigo": "LIN",
+        "posicion": 6
+      },
+      {
+        "codigo": "GAS",
+        "posicion": 7
+      },
+      {
+        "codigo": "ALB",
+        "posicion": 8
+      },
+      {
+        "codigo": "OCO",
+        "posicion": 9
+      },
+      {
+        "codigo": "ALO",
+        "posicion": 10
+      },
+      {
+        "codigo": "BOR",
+        "posicion": 11
+      },
+      {
+        "codigo": "RUS",
+        "posicion": 12
+      },
+      {
+        "codigo": "HUL",
+        "posicion": 13
+      },
+      {
+        "codigo": "COL",
+        "posicion": 14
+      },
+      {
+        "codigo": "PER",
+        "posicion": 15
+      },
+      {
+        "codigo": "SAI",
+        "posicion": 16
+      },
+      {
+        "codigo": "LEC",
+        "posicion": null
+      },
+      {
+        "codigo": "STR",
+        "posicion": null
+      },
+      {
+        "codigo": "NOR",
+        "posicion": null
+      },
+      {
+        "codigo": "BEA",
+        "posicion": null
+      },
+      {
+        "codigo": "BOT",
+        "posicion": null
+      },
+      {
+        "codigo": "VER",
+        "posicion": null
+      }
+    ],
+    "barcelona": [
+      {
+        "codigo": "HAM",
+        "posicion": 1
+      },
+      {
+        "codigo": "RUS",
+        "posicion": 2
+      },
+      {
+        "codigo": "NOR",
+        "posicion": 3
+      },
+      {
+        "codigo": "VER",
+        "posicion": 4
+      },
+      {
+        "codigo": "PIA",
+        "posicion": 5
+      },
+      {
+        "codigo": "HAD",
+        "posicion": 6
+      },
+      {
+        "codigo": "GAS",
+        "posicion": 7
+      },
+      {
+        "codigo": "LAW",
+        "posicion": 8
+      },
+      {
+        "codigo": "LIN",
+        "posicion": 9
+      },
+      {
+        "codigo": "COL",
+        "posicion": 10
+      },
+      {
+        "codigo": "BOR",
+        "posicion": 11
+      },
+      {
+        "codigo": "SAI",
+        "posicion": 12
+      },
+      {
+        "codigo": "OCO",
+        "posicion": 13
+      },
+      {
+        "codigo": "PER",
+        "posicion": 14
+      },
+      {
+        "codigo": "LEC",
+        "posicion": 15
+      },
+      {
+        "codigo": "ANT",
+        "posicion": 16
+      },
+      {
+        "codigo": "BEA",
+        "posicion": 17
+      },
+      {
+        "codigo": "ALB",
+        "posicion": null
+      },
+      {
+        "codigo": "ALO",
+        "posicion": null
+      },
+      {
+        "codigo": "HUL",
+        "posicion": null
+      },
+      {
+        "codigo": "BOT",
+        "posicion": null
+      },
+      {
+        "codigo": "STR",
+        "posicion": null
+      }
+    ],
+    "austria": [
+      {
+        "codigo": "RUS",
+        "posicion": 1
+      },
+      {
+        "codigo": "VER",
+        "posicion": 2
+      },
+      {
+        "codigo": "ANT",
+        "posicion": 3
+      },
+      {
+        "codigo": "PIA",
+        "posicion": 4
+      },
+      {
+        "codigo": "HAM",
+        "posicion": 5
+      },
+      {
+        "codigo": "HAD",
+        "posicion": 6
+      },
+      {
+        "codigo": "NOR",
+        "posicion": 7
+      },
+      {
+        "codigo": "LEC",
+        "posicion": 8
+      },
+      {
+        "codigo": "LAW",
+        "posicion": 9
+      },
+      {
+        "codigo": "LIN",
+        "posicion": 10
+      },
+      {
+        "codigo": "BOR",
+        "posicion": 11
+      },
+      {
+        "codigo": "HUL",
+        "posicion": 12
+      },
+      {
+        "codigo": "GAS",
+        "posicion": 13
+      },
+      {
+        "codigo": "BEA",
+        "posicion": 14
+      },
+      {
+        "codigo": "COL",
+        "posicion": 15
+      },
+      {
+        "codigo": "OCO",
+        "posicion": 16
+      },
+      {
+        "codigo": "ALB",
+        "posicion": 17
+      },
+      {
+        "codigo": "ALO",
+        "posicion": 18
+      },
+      {
+        "codigo": "STR",
+        "posicion": null
+      },
+      {
+        "codigo": "SAI",
+        "posicion": null
+      },
+      {
+        "codigo": "PER",
+        "posicion": null
+      },
+      {
+        "codigo": "BOT",
+        "posicion": null
+      }
+    ],
+    "britain": [
+      {
+        "codigo": "LEC",
+        "posicion": 1
+      },
+      {
+        "codigo": "RUS",
+        "posicion": 2
+      },
+      {
+        "codigo": "HAM",
+        "posicion": 3
+      },
+      {
+        "codigo": "NOR",
+        "posicion": 4
+      },
+      {
+        "codigo": "HAD",
+        "posicion": 5
+      },
+      {
+        "codigo": "LAW",
+        "posicion": 6
+      },
+      {
+        "codigo": "LIN",
+        "posicion": 7
+      },
+      {
+        "codigo": "BOR",
+        "posicion": 8
+      },
+      {
+        "codigo": "COL",
+        "posicion": 9
+      },
+      {
+        "codigo": "GAS",
+        "posicion": 10
+      },
+      {
+        "codigo": "PIA",
+        "posicion": 11
+      },
+      {
+        "codigo": "BEA",
+        "posicion": 12
+      },
+      {
+        "codigo": "OCO",
+        "posicion": 13
+      },
+      {
+        "codigo": "PER",
+        "posicion": 14
+      },
+      {
+        "codigo": "ANT",
+        "posicion": 15
+      },
+      {
+        "codigo": "BOT",
+        "posicion": 16
+      },
+      {
+        "codigo": "SAI",
+        "posicion": 17
+      },
+      {
+        "codigo": "ALO",
+        "posicion": 18
+      },
+      {
+        "codigo": "STR",
+        "posicion": 19
+      },
+      {
+        "codigo": "VER",
+        "posicion": 20
+      },
+      {
+        "codigo": "ALB",
+        "posicion": null
+      },
+      {
+        "codigo": "HUL",
+        "posicion": null
+      }
+    ],
+    "belgium": [
+      {
+        "codigo": "ANT",
+        "posicion": 1
+      },
+      {
+        "codigo": "LEC",
+        "posicion": 2
+      },
+      {
+        "codigo": "VER",
+        "posicion": 3
+      },
+      {
+        "codigo": "HAM",
+        "posicion": 4
+      },
+      {
+        "codigo": "PIA",
+        "posicion": 5
+      },
+      {
+        "codigo": "HAD",
+        "posicion": 6
+      },
+      {
+        "codigo": "NOR",
+        "posicion": 7
+      },
+      {
+        "codigo": "BOR",
+        "posicion": 8
+      },
+      {
+        "codigo": "LIN",
+        "posicion": 9
+      },
+      {
+        "codigo": "COL",
+        "posicion": 10
+      },
+      {
+        "codigo": "GAS",
+        "posicion": 11
+      },
+      {
+        "codigo": "LAW",
+        "posicion": 12
+      },
+      {
+        "codigo": "HUL",
+        "posicion": 13
+      },
+      {
+        "codigo": "BEA",
+        "posicion": 14
+      },
+      {
+        "codigo": "ALB",
+        "posicion": 15
+      },
+      {
+        "codigo": "SAI",
+        "posicion": 16
+      },
+      {
+        "codigo": "OCO",
+        "posicion": 17
+      },
+      {
+        "codigo": "BOT",
+        "posicion": 18
+      },
+      {
+        "codigo": "ALO",
+        "posicion": 19
+      },
+      {
+        "codigo": "STR",
+        "posicion": null
+      },
+      {
+        "codigo": "PER",
+        "posicion": null
+      },
+      {
+        "codigo": "RUS",
+        "posicion": null
+      }
+    ],
+    "hungary": [
+      {
+        "codigo": "NOR",
+        "posicion": 1
+      },
+      {
+        "codigo": "VER",
+        "posicion": 2
+      },
+      {
+        "codigo": "ANT",
+        "posicion": 3
+      },
+      {
+        "codigo": "LEC",
+        "posicion": 4
+      },
+      {
+        "codigo": "HAM",
+        "posicion": 5
+      },
+      {
+        "codigo": "HAD",
+        "posicion": 6
+      },
+      {
+        "codigo": "RUS",
+        "posicion": 7
+      },
+      {
+        "codigo": "LAW",
+        "posicion": 8
+      },
+      {
+        "codigo": "HUL",
+        "posicion": 9
+      },
+      {
+        "codigo": "LIN",
+        "posicion": 10
+      },
+      {
+        "codigo": "BOR",
+        "posicion": 11
+      },
+      {
+        "codigo": "GAS",
+        "posicion": 12
+      },
+      {
+        "codigo": "STR",
+        "posicion": 13
+      },
+      {
+        "codigo": "ALO",
+        "posicion": 14
+      },
+      {
+        "codigo": "COL",
+        "posicion": 15
+      },
+      {
+        "codigo": "OCO",
+        "posicion": 16
+      },
+      {
+        "codigo": "ALB",
+        "posicion": 17
+      },
+      {
+        "codigo": "SAI",
+        "posicion": 18
+      },
+      {
+        "codigo": "BEA",
+        "posicion": 19
+      },
+      {
+        "codigo": "PIA",
+        "posicion": null
+      },
+      {
+        "codigo": "PER",
+        "posicion": null
+      },
+      {
+        "codigo": "BOT",
+        "posicion": null
+      }
+    ],
+    "netherlands": [
+      {
+        "codigo": "NOR",
+        "posicion": 1
+      },
+      {
+        "codigo": "ANT",
+        "posicion": 2
+      },
+      {
+        "codigo": "RUS",
+        "posicion": 3
+      },
+      {
+        "codigo": "HAM",
+        "posicion": 4
+      },
+      {
+        "codigo": "LEC",
+        "posicion": 5
+      },
+      {
+        "codigo": "PIA",
+        "posicion": 6
+      },
+      {
+        "codigo": "LAW",
+        "posicion": 7
+      },
+      {
+        "codigo": "HUL",
+        "posicion": 8
+      },
+      {
+        "codigo": "ALO",
+        "posicion": 9
+      },
+      {
+        "codigo": "GAS",
+        "posicion": 10
+      },
+      {
+        "codigo": "TSU",
+        "posicion": 11
+      },
+      {
+        "codigo": "LIN",
+        "posicion": 12
+      },
+      {
+        "codigo": "BOR",
+        "posicion": 13
+      },
+      {
+        "codigo": "COL",
+        "posicion": 14
+      },
+      {
+        "codigo": "PER",
+        "posicion": 15
+      },
+      {
+        "codigo": "SAI",
+        "posicion": 16
+      },
+      {
+        "codigo": "ALB",
+        "posicion": 17
+      },
+      {
+        "codigo": "BOT",
+        "posicion": null
+      },
+      {
+        "codigo": "OCO",
+        "posicion": null
+      },
+      {
+        "codigo": "STR",
+        "posicion": null
+      },
+      {
+        "codigo": "BEA",
+        "posicion": null
+      },
+      {
+        "codigo": "VER",
+        "posicion": null
+      }
+    ],
+    "italy": [
+      {
+        "codigo": "ANT",
+        "posicion": 1
+      },
+      {
+        "codigo": "RUS",
+        "posicion": 2
+      },
+      {
+        "codigo": "VER",
+        "posicion": 3
+      },
+      {
+        "codigo": "NOR",
+        "posicion": 4
+      },
+      {
+        "codigo": "PIA",
+        "posicion": 5
+      },
+      {
+        "codigo": "HAM",
+        "posicion": 6
+      },
+      {
+        "codigo": "GAS",
+        "posicion": 7
+      },
+      {
+        "codigo": "LIN",
+        "posicion": 8
+      },
+      {
+        "codigo": "COL",
+        "posicion": 9
+      },
+      {
+        "codigo": "TSU",
+        "posicion": 10
+      },
+      {
+        "codigo": "BOR",
+        "posicion": 11
+      },
+      {
+        "codigo": "HUL",
+        "posicion": 12
+      },
+      {
+        "codigo": "SAI",
+        "posicion": 13
+      },
+      {
+        "codigo": "LAW",
+        "posicion": 14
+      },
+      {
+        "codigo": "BEA",
+        "posicion": 15
+      },
+      {
+        "codigo": "OCO",
+        "posicion": 16
+      },
+      {
+        "codigo": "ALB",
+        "posicion": 17
+      },
+      {
+        "codigo": "PER",
+        "posicion": 18
+      },
+      {
+        "codigo": "BOT",
+        "posicion": 19
+      },
+      {
+        "codigo": "STR",
+        "posicion": null
+      },
+      {
+        "codigo": "ALO",
+        "posicion": null
+      },
+      {
+        "codigo": "LEC",
+        "posicion": null
+      }
+    ],
+    "spain": [
+      {
+        "codigo": "ANT",
+        "posicion": 1
+      },
+      {
+        "codigo": "VER",
+        "posicion": 2
+      },
+      {
+        "codigo": "NOR",
+        "posicion": 3
+      },
+      {
+        "codigo": "LEC",
+        "posicion": 4
+      },
+      {
+        "codigo": "RUS",
+        "posicion": 5
+      },
+      {
+        "codigo": "LAW",
+        "posicion": 6
+      },
+      {
+        "codigo": "COL",
+        "posicion": 7
+      },
+      {
+        "codigo": "PIA",
+        "posicion": 8
+      },
+      {
+        "codigo": "LIN",
+        "posicion": 9
+      },
+      {
+        "codigo": "HUL",
+        "posicion": 10
+      },
+      {
+        "codigo": "OCO",
+        "posicion": 11
+      },
+      {
+        "codigo": "GAS",
+        "posicion": 12
+      },
+      {
+        "codigo": "BOR",
+        "posicion": 13
+      },
+      {
+        "codigo": "TSU",
+        "posicion": 14
+      },
+      {
+        "codigo": "ALB",
+        "posicion": 15
+      },
+      {
+        "codigo": "BEA",
+        "posicion": 16
+      },
+      {
+        "codigo": "ALO",
+        "posicion": 17
+      },
+      {
+        "codigo": "BOT",
+        "posicion": 18
+      },
+      {
+        "codigo": "SAI",
+        "posicion": null
+      },
+      {
+        "codigo": "PER",
+        "posicion": null
+      },
+      {
+        "codigo": "STR",
+        "posicion": null
+      },
+      {
+        "codigo": "HAM",
+        "posicion": null
+      }
+    ],
+    "azerbaijan": [
+      {
+        "codigo": "RUS",
+        "posicion": 1
+      },
+      {
+        "codigo": "VER",
+        "posicion": 2
+      },
+      {
+        "codigo": "HAD",
+        "posicion": 3
+      },
+      {
+        "codigo": "LEC",
+        "posicion": 4
+      },
+      {
+        "codigo": "ANT",
+        "posicion": 5
+      },
+      {
+        "codigo": "HAM",
+        "posicion": 6
+      },
+      {
+        "codigo": "LIN",
+        "posicion": 7
+      },
+      {
+        "codigo": "OCO",
+        "posicion": 8
+      },
+      {
+        "codigo": "BEA",
+        "posicion": 9
+      },
+      {
+        "codigo": "SAI",
+        "posicion": 10
+      },
+      {
+        "codigo": "HUL",
+        "posicion": 11
+      },
+      {
+        "codigo": "LAW",
+        "posicion": 12
+      },
+      {
+        "codigo": "PIA",
+        "posicion": 13
+      },
+      {
+        "codigo": "PER",
+        "posicion": 14
+      },
+      {
+        "codigo": "BOR",
+        "posicion": 15
+      },
+      {
+        "codigo": "BOT",
+        "posicion": 16
+      },
+      {
+        "codigo": "COL",
+        "posicion": null
+      },
+      {
+        "codigo": "GAS",
+        "posicion": null
+      },
+      {
+        "codigo": "NOR",
+        "posicion": null
+      },
+      {
+        "codigo": "ALB",
+        "posicion": null
+      },
+      {
+        "codigo": "ALO",
+        "posicion": null
+      },
+      {
+        "codigo": "STR",
+        "posicion": null
+      }
+    ]
+  }
+}

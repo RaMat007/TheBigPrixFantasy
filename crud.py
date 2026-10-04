@@ -1231,3 +1231,18 @@ def auditar_calendario_temporada(temporada_id):
         return pd.DataFrame(report)
     finally:
         conn.close()
+
+
+def reconciliar_resultados_oficiales_2026(temporada_id):
+    from reconcile_results_2026 import reconcile
+    conn = get_connection()
+    try:
+        report = reconcile(conn, temporada_id)
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+    st.cache_data.clear()
+    return pd.DataFrame(report)

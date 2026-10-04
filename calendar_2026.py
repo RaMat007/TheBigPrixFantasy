@@ -59,6 +59,8 @@ def audit_race(row, picks, results, points):
         if picks or results or points:
             problems.append('Registros archivados de GP cancelado; excluidos de puntuación')
     elif expected:
+        if not picks:
+            problems.append('Sin picks históricos; requiere recuperar registros originales')
         if not results:
             problems.append('Faltan resultados')
         elif tuple(codes.get(i) for i in range(1, 6)) != expected:

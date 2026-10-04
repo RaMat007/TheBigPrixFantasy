@@ -819,6 +819,20 @@ if menu == "Super Admin" and st.session_state.is_admin:
     # Carreras
     if admin_menu == "Carreras":
         st.subheader("Carreras")
+        with st.expander("Revisión de calendario, picks y puntos", expanded=True):
+            st.caption("Revisa los registros vinculados a cada GP. La corrección de resultados conserva todos los picks existentes y crea un respaldo privado.")
+            if st.button("Auditar temporada 2026", key="admin_audit_calendar_2026"):
+                st.dataframe(crud.auditar_calendario_temporada(temporada_id), hide_index=True, use_container_width=True)
+            st.caption("Clasificaciones de los 15 GP disputados verificadas contra Formula1.com al 03/10/2026. Recalcula puntos sin crear picks para carreras pasadas ni alterar elecciones manuales.")
+            if st.button("Actualizar resultados oficiales y recalcular puntos", key="reconcile_results_2026"):
+                try:
+                    report = crud.reconciliar_resultados_oficiales_2026(temporada_id)
+                    st.success("Resultados y puntos actualizados. Picks conservados y respaldo creado.")
+                    st.dataframe(report, hide_index=True, use_container_width=True)
+                    st.dataframe(crud.auditar_calendario_temporada(temporada_id), hide_index=True, use_container_width=True)
+                except Exception as exc:
+                    st.error(f"No se aplicaron cambios: {exc}")
+
 
         carreras = crud.listar_carreras_temporada(temporada_id)
         if carreras.empty:
@@ -2527,4 +2541,3 @@ elif menu == "Bonos":
 
         st.dataframe(df_top, use_container_width=True, hide_index=True)
         st.caption("Top entradas individuales por carrera (puntos en una sola carrera).")
-
