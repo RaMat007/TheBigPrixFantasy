@@ -475,7 +475,7 @@ if st.sidebar.button("Cerrar sesión"):
     st.stop()
 
 if st.session_state.is_admin:
-    menu_opciones = ["Super Admin", "Dashboard", "Escuderías", "Carreras", "Race View", "Bonos"]
+    menu_opciones = ["Dashboard", "Super Admin", "Escuderías", "Carreras", "Race View", "Bonos"]
 else:
     menu_opciones = ["Dashboard", "Mi Pick", "Escuderías", "Carreras", "Race View", "Bonos"]
 
@@ -492,13 +492,16 @@ if not temporada:
 
 temporada_id = temporada["id"]
 
-# Sincronizamos automáticamente datos de F1DB para la temporada actual (por ahora, 2026)
-try:
-    crud.actualizar_carreras_desde_f1db(temporada_id, year=2026)
-except Exception as e:
-    logger.error(f"No se pudo sincronizar carreras desde F1DB: {e}")
-    st.error("No se pudo validar el calendario. Revisa la temporada antes de continuar.")
-    st.stop()
+# El calendario se modifica solo desde una revisión administrativa con respaldo.
+# El mantenimiento de la app cubre respaldos y el próximo GP; el worker también corre sin visitas.
+_ops_now = datetime.now(timezone.utc).timestamp()
+if _ops_now - st.session_state.get('_maintenance_at', 0) > 60:
+    try:
+        crud.mantenimiento_temporada(temporada_id)
+        st.session_state['_maintenance_at'] = _ops_now
+    except Exception as exc:
+        logger.error('Fallo de mantenimiento: %s', exc)
+        st.warning('No se pudo completar el respaldo o la preparación de autopicks. Revisa Control de temporada.')
 
 # =========================
 # SUPER ADMIN
@@ -507,8 +510,12 @@ if menu == "Super Admin" and st.session_state.is_admin:
     st.sidebar.markdown("**Modo Admin**")
     admin_menu = st.sidebar.radio(
         "Admin Menu", 
-        ["Temporadas", "Pilotos", "Usuarios", "Carreras", "Resultados"]
+        ["Control de temporada", "Temporadas", "Pilotos", "Usuarios", "Carreras", "Resultados"]
     )
+
+    if admin_menu == "Control de temporada":
+        import operations_ui
+        operations_ui.render(temporada_id)
 
     # Temporadas
     if admin_menu == "Temporadas":
@@ -1143,862 +1150,685 @@ if menu == "Super Admin" and st.session_state.is_admin:
 # DASHBOARD
 # =========================
 if menu == "Dashboard":
-    # Ficha de piloto seleccionado (pick actual para la próxima carrera)
-    # Debe ir dentro de with col_izq:
+    _summary_tab, _detail_tab = st.tabs(['Inicio', 'Detalle'])
+    with _summary_tab:
+        import dashboard_compact
+        dashboard_compact.render(temporada)
+    with _detail_tab:
+        # Ficha de piloto seleccionado (pick actual para la próxima carrera)
+        # Debe ir dentro de with col_izq:
 
-    st.markdown(
-        f"""
-        <div class="dashboard-eyebrow">Temporada {temporada['nombre']}</div>
-        <h1 class="dashboard-title">Dashboard</h1>
-        """,
-        unsafe_allow_html=True,
-    )
-
-    # =========================
-    # PERFIL DE USUARIO
-    # =========================
-    import base64 as _b64
-
-    _foto_b64 = st.session_state.get("foto_perfil", "")
-    _escuderia_display = st.session_state.get("escuderia", "") or st.session_state.username
-
-    # Construir HTML de la foto en círculo
-    def _mime_b64(s):
-        if not s: return "image/jpeg"
-        if s[:4] == "/9j/": return "image/jpeg"
-        if s[:5] == "iVBOR": return "image/png"
-        if s[:5] == "UklGR": return "image/webp"
-        return "image/jpeg"
-
-    if _foto_b64:
-        _img_src = f"data:{_mime_b64(_foto_b64)};base64,{_foto_b64}"
-    else:
-        # Placeholder SVG genérico con iniciales
-        _inicial = (_escuderia_display[0] if _escuderia_display else "?").upper()
-        _svg = (
-            f'<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100">'
-            f'<circle cx="50" cy="50" r="50" fill="#2e3140"/>'
-            f'<text x="50" y="67" text-anchor="middle" font-size="44" font-family="Arial" '
-            f'font-weight="bold" fill="#00eaff">{_inicial}</text></svg>'
+        st.markdown(
+            f"""
+            <div class="dashboard-eyebrow">Temporada {temporada['nombre']}</div>
+            <h1 class="dashboard-title">Dashboard</h1>
+            """,
+            unsafe_allow_html=True,
         )
-        _img_src = "data:image/svg+xml;base64," + _b64.b64encode(_svg.encode()).decode()
 
-    st.markdown(f"""
-    <style>
-    .profile-circle-wrap {{
-        display: flex;
-        align-items: center;
-        gap: 16px;
-        background: linear-gradient(135deg, #1b2330 0%, #151b25 100%);
-        border-radius: 14px;
-        padding: 14px 18px;
-        border: 1px solid rgba(56, 220, 255, 0.28);
-        margin-bottom: 12px;
-        width: 100%;
-    }}
-    .profile-circle-img {{
-        width: 58px;
-        height: 58px;
-        border-radius: 50%;
-        object-fit: cover;
-        border: 3px solid #00eaff;
-        box-shadow: 0 0 16px #00eaff55;
-        flex-shrink: 0;
-    }}
-    .profile-info {{
-        display: flex;
-        flex-direction: column;
-        gap: 4px;
-    }}
-    .profile-escuderia {{
-        font-size: 1.2rem;
-        font-weight: 800;
-        color: #fff;
-        letter-spacing: 0.5px;
-    }}
-    .profile-label {{
-        font-size: 0.7rem;
-        color: #00eaff;
-        text-transform: uppercase;
-        letter-spacing: 1.5px;
-    }}
-    </style>
-    <div class="profile-circle-wrap">
-        <img class="profile-circle-img" src="{_img_src}" alt="Foto de perfil"/>
-        <div class="profile-info">
-            <div class="profile-label">🏎️ Escudería</div>
-            <div class="profile-escuderia">{_escuderia_display}</div>
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
+        # =========================
+        # PERFIL DE USUARIO
+        # =========================
+        import base64 as _b64
 
-    with st.expander("📷 Cambiar foto de perfil"):
-        _uploaded = st.file_uploader(
-            "Elige una imagen (PNG, JPG, WEBP — máx. 2 MB)",
-            type=["png", "jpg", "jpeg", "webp"],
-            key="perfil_foto_uploader",
-        )
-        if _uploaded is not None:
-            _raw_bytes = _uploaded.read()
-            if len(_raw_bytes) > 2 * 1024 * 1024:
-                st.error("La imagen supera los 2 MB. Elige una más pequeña.")
-            else:
-                _new_b64 = _b64.b64encode(_raw_bytes).decode("utf-8")
-                if st.button("Guardar foto", key="btn_guardar_foto"):
-                    crud.actualizar_foto_perfil(st.session_state.user_id, _new_b64)
-                    st.session_state.foto_perfil = _new_b64
-                    st.success("✅ Foto actualizada correctamente")
-                    st.rerun()
+        _foto_b64 = st.session_state.get("foto_perfil", "")
+        _escuderia_display = st.session_state.get("escuderia", "") or st.session_state.username
 
-    # =========================
-    # PRÓXIMA CARRERA + MI PICK (lado a lado)
-    # =========================
+        # Construir HTML de la foto en círculo
+        def _mime_b64(s):
+            if not s: return "image/jpeg"
+            if s[:4] == "/9j/": return "image/jpeg"
+            if s[:5] == "iVBOR": return "image/png"
+            if s[:5] == "UklGR": return "image/webp"
+            return "image/jpeg"
 
-    proxima = crud.obtener_proxima_carrera(temporada_id)
+        if _foto_b64:
+            _img_src = f"data:{_mime_b64(_foto_b64)};base64,{_foto_b64}"
+        else:
+            # Placeholder SVG genérico con iniciales
+            _inicial = (_escuderia_display[0] if _escuderia_display else "?").upper()
+            _svg = (
+                f'<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100">'
+                f'<circle cx="50" cy="50" r="50" fill="#2e3140"/>'
+                f'<text x="50" y="67" text-anchor="middle" font-size="44" font-family="Arial" '
+                f'font-weight="bold" fill="#00eaff">{_inicial}</text></svg>'
+            )
+            _img_src = "data:image/svg+xml;base64," + _b64.b64encode(_svg.encode()).decode()
 
-    # Los mismos datos del standing alimentan el resumen competitivo.
-    progreso = crud.progreso_pilotos_temporada(temporada_id)
-    usuarios_puntos = crud.listar_usuarios_con_puntos(temporada_id)
-
-    _mi_posicion = "—"
-    _mis_puntos = 0
-    _brecha_lider = 0
-    if usuarios_puntos is not None and not usuarios_puntos.empty:
-        _tabla_resumen = usuarios_puntos.reset_index(drop=True)
-        _tabla_resumen["posicion"] = _tabla_resumen.index + 1
-        _mi_fila = _tabla_resumen[_tabla_resumen["username"] == st.session_state.username]
-        if not _mi_fila.empty:
-            _mi_posicion = f"#{int(_mi_fila.iloc[0]['posicion'])}"
-            _mis_puntos = int(_mi_fila.iloc[0]["total_puntos"] or 0)
-            _puntos_lider = int(_tabla_resumen.iloc[0]["total_puntos"] or 0)
-            _brecha_lider = max(0, _puntos_lider - _mis_puntos)
-
-    _rounds_completados = 0 if progreso is None or progreso.empty else int(progreso["round"].nunique())
-    _carreras_temporada = crud.listar_carreras_temporada(temporada_id)
-    _total_carreras = 0 if _carreras_temporada is None else len(_carreras_temporada.index)
-    _carreras_restantes = max(0, _total_carreras - _rounds_completados)
-    st.markdown(
-        f"""
-        <div class="dashboard-kpis">
-          <div class="dashboard-kpi">
-            <div class="dashboard-kpi-label">Posición</div>
-            <div class="dashboard-kpi-value dashboard-kpi-accent">{_mi_posicion}</div>
-          </div>
-          <div class="dashboard-kpi">
-            <div class="dashboard-kpi-label">Mis puntos</div>
-            <div class="dashboard-kpi-value">{_mis_puntos}</div>
-          </div>
-          <div class="dashboard-kpi">
-            <div class="dashboard-kpi-label">Distancia al líder</div>
-            <div class="dashboard-kpi-value">{_brecha_lider} pts</div>
-          </div>
-          <div class="dashboard-kpi">
-            <div class="dashboard-kpi-label">Carreras restantes</div>
-            <div class="dashboard-kpi-value">{_carreras_restantes}</div>
-          </div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-
-    # Sincronizar y auto-asignar solo una vez por sesión (evita lag en cada rerun)
-    _sync_key = f"sync_done_{temporada_id}"
-    if not st.session_state.get(_sync_key):
-        crud.sincronizar_auto_picks_temporada(temporada_id)
-        if proxima and not carrera_bloqueada(proxima["inicio"]):
-            crud.auto_asignar_picks_faltantes(proxima["id"], 0)
-        st.session_state[_sync_key] = True
-
-    col_izq, col_der = st.columns([1, 1.25], gap="large")
-
-    # Bloque Próxima carrera (izquierda)
-    with col_izq:
-        st.markdown("""
+        st.markdown(f"""
         <style>
-        .f1-card-modern {
-            background: linear-gradient(135deg, #23272f 80%, #2e3140 100%);
-            border-radius: 20px;
-            box-shadow: 0 6px 32px 0 rgba(0,0,0,0.18), 0 1.5px 8px 0 #00eaff33;
-            padding: 28px 22px 22px 22px;
-            margin-bottom: 22px;
-            min-height: 300px;
-            width: 100%;
-            max-width: none;
-            border: 1px solid #00eaff44;
-            position: relative;
-            margin-left: auto;
-            margin-right: auto;
-        }
-        @media (max-width: 768px) {
-            .f1-card-modern {
-                max-width: 100%;
-            }
-        }
-        .f1-card-modern .f1-countdown {
-            background: linear-gradient(90deg, #00eaff 0%, #0055ff 100%);
-            color: #fff;
-            border-radius: 14px 14px 0 0;
-            font-size: 1.65rem;
-            font-weight: 800;
-            letter-spacing: 1.5px;
-            text-align: center;
-            margin: -28px -22px 18px -22px;
-            padding: 18px 0 10px 0;
-            box-shadow: 0 2px 12px #00eaff33;
-        }
-        .f1-card-modern .f1-card-header {
-            font-weight: 700;
-            font-size: 1.25rem;
-            margin-bottom: 7px;
-            color: #00eaff;
-            letter-spacing: 0.7px;
-        }
-        .f1-card-modern .f1-card-title {
-            font-size: 1.12rem;
-            margin-bottom: 5px;
-            color: #fff;
-        }
-        .f1-card-modern .f1-card-meta {
-            font-size: 1.01rem;
-            margin-bottom: 12px;
-            color: #b0eaff;
-        }
-        .f1-card-modern .f1-card-footer {
-            font-size: 0.98rem;
-            color: #a0a0a0;
-            display: flex;
-            gap: 18px;
-            justify-content: center;
-        }
-        .f1-card-modern .f1-layout-img {
-            height: 120px;
-            width: 120px;
+        .profile-circle-wrap {{
             display: flex;
             align-items: center;
-            justify-content: center;
-            margin: 0 auto 14px auto;
-            background: #23272f;
+            gap: 16px;
+            background: linear-gradient(135deg, #1b2330 0%, #151b25 100%);
             border-radius: 14px;
-            overflow: hidden;
-            box-shadow: 0 2px 12px #00eaff22;
-        }
+            padding: 14px 18px;
+            border: 1px solid rgba(56, 220, 255, 0.28);
+            margin-bottom: 12px;
+            width: 100%;
+        }}
+        .profile-circle-img {{
+            width: 58px;
+            height: 58px;
+            border-radius: 50%;
+            object-fit: cover;
+            border: 3px solid #00eaff;
+            box-shadow: 0 0 16px #00eaff55;
+            flex-shrink: 0;
+        }}
+        .profile-info {{
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }}
+        .profile-escuderia {{
+            font-size: 1.2rem;
+            font-weight: 800;
+            color: #fff;
+            letter-spacing: 0.5px;
+        }}
+        .profile-label {{
+            font-size: 0.7rem;
+            color: #00eaff;
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+        }}
         </style>
-        """, unsafe_allow_html=True)
-        st.subheader("⏭️ Próxima Carrera")
-        if not proxima:
-            st.success("🎉 No hay más carreras pendientes")
-        else:
-            inicio = datetime.fromisoformat(proxima["inicio"]).replace(tzinfo=timezone.utc)
-            ahora = datetime.now(timezone.utc)
-            delta = inicio - ahora
-            dias = delta.days
-            horas, rem = divmod(delta.seconds, 3600)
-            minutos, segundos = divmod(rem, 60)
-            pista_name = str(proxima["pista"]).strip() if "pista" in proxima.keys() else ""
-            carrera_nombre = proxima["nombre"] if "nombre" in proxima.keys() else ""
-            kms = proxima["kms"] if "kms" in proxima.keys() else ""
-            vueltas = proxima["vueltas"] if "vueltas" in proxima.keys() else ""
-            round_val = proxima["round"] if "round" in proxima.keys() else ""
-            inicio_str = proxima["inicio"] if "inicio" in proxima.keys() else ""
-            import unicodedata
-            def normaliza(s):
-                s = str(s).strip().lower()
-                s = ''.join(c for c in unicodedata.normalize('NFD', s) if unicodedata.category(c) != 'Mn')
-                return s
-            equivalencias_manual = {
-                'melbourne': 'albert park circuit',
-                'shanghai': 'shanghai international circuit',
-                'suzuka': 'suzuka international racing course',
-                'bahrain': 'bahrain international circuit',
-                'jeddah': 'jeddah corniche circuit',
-                'miami': 'miami international autodrome',
-                'gilles villeneuve': 'circuit gilles-villeneuve',
-                'montreal': 'circuit gilles-villeneuve',
-                'monaco': 'circuit de monaco',
-                'catalunya': 'circuit de barcelona-catalunya',
-                'barcelona': 'circuit de barcelona-catalunya',
-                'red bull ring': 'red bull ring',
-                'silverstone': 'silverstone circuit',
-                'spa-francorchamps': 'circuit de spa-francorchamps',
-                'spa': 'circuit de spa-francorchamps',
-                'hungaroring': 'hungaroring',
-                'zandvoort': 'circuit zandvoort',
-                'monza': 'autodromo nazionale monza',
-                'madring': 'circuito de madring',
-                'madrid': 'circuito de madring',
-                'baku': 'baku city circuit',
-                'marina bay': 'marina bay street circuit',
-                'singapore': 'marina bay street circuit',
-                'americas': 'circuit of the americas',
-                'austin': 'circuit of the americas',
-                'hermanos rodriguez': 'autodromo hermanos rodriguez',
-                'mexico city': 'autodromo hermanos rodriguez',
-                'jose carlos pace': 'autodromo jose carlos pace - interlagos',
-                'interlagos': 'autodromo jose carlos pace - interlagos',
-                'las vegas': 'las vegas street circuit',
-                'lusail': 'losail international circuit',
-                'yas marina': 'yas marina circuit',
-            }
-            pista_name_norm = normaliza(pista_name)
-            layout_key = pista_name_norm
-            if layout_key not in _CIRCUIT_LAYOUTS and pista_name_norm in equivalencias_manual:
-                layout_key = normaliza(equivalencias_manual[pista_name_norm])
-            img_html = ""
-            if layout_key in _CIRCUIT_LAYOUTS:
-                coords = _CIRCUIT_LAYOUTS[layout_key]
-                layout_buf = _plot_layout_icon(coords, width=110, height=110)
-                import base64
-                layout_bytes = layout_buf.getvalue()
-                layout_b64 = base64.b64encode(layout_bytes).decode('utf-8')
-                img_html = f"<img src='data:image/png;base64,{layout_b64}' width='110' style='display:block;margin:auto;border-radius:8px;'/>"
-            else:
-                img_html = "<span style='color:#888;font-size:0.9rem;'>Sin layout</span>"
-            st.markdown(f"""
-            <div class="f1-card-modern">
-                <div class="f1-countdown">{dias}d {horas:02}h {minutos:02}m {segundos:02}s</div>
-                <div class="f1-layout-img">{img_html}</div>
-                <div class="f1-card-header">R{round_val} · {pista_name}</div>
-                <div class="f1-card-title">{carrera_nombre}</div>
-                <div class="f1-card-meta">{inicio.strftime('%d %b %Y — %H:%M UTC')}</div>
-                <div class="f1-card-footer">
-                    <span>{kms} km</span>
-                    <span>{vueltas} vueltas</span>
-                </div>
+        <div class="profile-circle-wrap">
+            <img class="profile-circle-img" src="{_img_src}" alt="Foto de perfil"/>
+            <div class="profile-info">
+                <div class="profile-label">🏎️ Escudería</div>
+                <div class="profile-escuderia">{_escuderia_display}</div>
             </div>
-            """, unsafe_allow_html=True)
-            st.caption("⏱️ Picks se bloquean al iniciar la carrera")
+        </div>
+        """, unsafe_allow_html=True)
 
-    # Bloque Mi Pick (derecha, solo usuarios no-admin)
-    with col_der:
-        if not st.session_state.is_admin:
-            st.subheader("Mi Pick (5° lugar)")
+        with st.expander("📷 Cambiar foto de perfil"):
+            _uploaded = st.file_uploader(
+                "Elige una imagen (PNG, JPG, WEBP — máx. 2 MB)",
+                type=["png", "jpg", "jpeg", "webp"],
+                key="perfil_foto_uploader",
+            )
+            if _uploaded is not None:
+                _raw_bytes = _uploaded.read()
+                if len(_raw_bytes) > 2 * 1024 * 1024:
+                    st.error("La imagen supera los 2 MB. Elige una más pequeña.")
+                else:
+                    _new_b64 = _b64.b64encode(_raw_bytes).decode("utf-8")
+                    if st.button("Guardar foto", key="btn_guardar_foto"):
+                        crud.actualizar_foto_perfil(st.session_state.user_id, _new_b64)
+                        st.session_state.foto_perfil = _new_b64
+                        st.success("✅ Foto actualizada correctamente")
+                        st.rerun()
+
+        # =========================
+        # PRÓXIMA CARRERA + MI PICK (lado a lado)
+        # =========================
+
+        proxima = crud.obtener_proxima_carrera(temporada_id)
+
+        # Los mismos datos del standing alimentan el resumen competitivo.
+        progreso = crud.progreso_pilotos_temporada(temporada_id)
+        usuarios_puntos = crud.listar_usuarios_con_puntos(temporada_id)
+
+        _mi_posicion = "—"
+        _mis_puntos = 0
+        _brecha_lider = 0
+        if usuarios_puntos is not None and not usuarios_puntos.empty:
+            _tabla_resumen = usuarios_puntos.reset_index(drop=True)
+            _tabla_resumen["posicion"] = _tabla_resumen.index + 1
+            _mi_fila = _tabla_resumen[_tabla_resumen["username"] == st.session_state.username]
+            if not _mi_fila.empty:
+                _mi_posicion = f"#{int(_mi_fila.iloc[0]['posicion'])}"
+                _mis_puntos = int(_mi_fila.iloc[0]["total_puntos"] or 0)
+                _puntos_lider = int(_tabla_resumen.iloc[0]["total_puntos"] or 0)
+                _brecha_lider = max(0, _puntos_lider - _mis_puntos)
+
+        _rounds_completados = 0 if progreso is None or progreso.empty else int(progreso["round"].nunique())
+        _carreras_temporada = crud.listar_carreras_temporada(temporada_id)
+        _total_carreras = 0 if _carreras_temporada is None else len(_carreras_temporada.index)
+        _carreras_restantes = max(0, _total_carreras - _rounds_completados)
+        st.markdown(
+            f"""
+            <div class="dashboard-kpis">
+              <div class="dashboard-kpi">
+                <div class="dashboard-kpi-label">Posición</div>
+                <div class="dashboard-kpi-value dashboard-kpi-accent">{_mi_posicion}</div>
+              </div>
+              <div class="dashboard-kpi">
+                <div class="dashboard-kpi-label">Mis puntos</div>
+                <div class="dashboard-kpi-value">{_mis_puntos}</div>
+              </div>
+              <div class="dashboard-kpi">
+                <div class="dashboard-kpi-label">Distancia al líder</div>
+                <div class="dashboard-kpi-value">{_brecha_lider} pts</div>
+              </div>
+              <div class="dashboard-kpi">
+                <div class="dashboard-kpi-label">Carreras restantes</div>
+                <div class="dashboard-kpi-value">{_carreras_restantes}</div>
+              </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+        # Sincronizar y auto-asignar solo una vez por sesión (evita lag en cada rerun)
+        _sync_key = f"sync_done_{temporada_id}"
+        if not st.session_state.get(_sync_key):
+            crud.sincronizar_auto_picks_temporada(temporada_id)
+            if proxima and not carrera_bloqueada(proxima["inicio"]):
+                crud.auto_asignar_picks_faltantes(proxima["id"], 0)
+            st.session_state[_sync_key] = True
+
+        col_izq, col_der = st.columns([1, 1.25], gap="large")
+
+        # Bloque Próxima carrera (izquierda)
+        with col_izq:
             st.markdown("""
             <style>
-            .mi-pick-center { display:flex; flex-direction:column; align-items:center; }
+            .f1-card-modern {
+                background: linear-gradient(135deg, #23272f 80%, #2e3140 100%);
+                border-radius: 20px;
+                box-shadow: 0 6px 32px 0 rgba(0,0,0,0.18), 0 1.5px 8px 0 #00eaff33;
+                padding: 28px 22px 22px 22px;
+                margin-bottom: 22px;
+                min-height: 300px;
+                width: 100%;
+                max-width: none;
+                border: 1px solid #00eaff44;
+                position: relative;
+                margin-left: auto;
+                margin-right: auto;
+            }
             @media (max-width: 768px) {
-                .mi-pick-center { align-items: center; text-align: center; }
+                .f1-card-modern {
+                    max-width: 100%;
+                }
+            }
+            .f1-card-modern .f1-countdown {
+                background: linear-gradient(90deg, #00eaff 0%, #0055ff 100%);
+                color: #fff;
+                border-radius: 14px 14px 0 0;
+                font-size: 1.65rem;
+                font-weight: 800;
+                letter-spacing: 1.5px;
+                text-align: center;
+                margin: -28px -22px 18px -22px;
+                padding: 18px 0 10px 0;
+                box-shadow: 0 2px 12px #00eaff33;
+            }
+            .f1-card-modern .f1-card-header {
+                font-weight: 700;
+                font-size: 1.25rem;
+                margin-bottom: 7px;
+                color: #00eaff;
+                letter-spacing: 0.7px;
+            }
+            .f1-card-modern .f1-card-title {
+                font-size: 1.12rem;
+                margin-bottom: 5px;
+                color: #fff;
+            }
+            .f1-card-modern .f1-card-meta {
+                font-size: 1.01rem;
+                margin-bottom: 12px;
+                color: #b0eaff;
+            }
+            .f1-card-modern .f1-card-footer {
+                font-size: 0.98rem;
+                color: #a0a0a0;
+                display: flex;
+                gap: 18px;
+                justify-content: center;
+            }
+            .f1-card-modern .f1-layout-img {
+                height: 120px;
+                width: 120px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                margin: 0 auto 14px auto;
+                background: #23272f;
+                border-radius: 14px;
+                overflow: hidden;
+                box-shadow: 0 2px 12px #00eaff22;
             }
             </style>
             """, unsafe_allow_html=True)
-
+            st.subheader("⏭️ Próxima Carrera")
             if not proxima:
-                st.info("No hay próxima carrera disponible para hacer pick.")
+                st.success("🎉 No hay más carreras pendientes")
             else:
-                pilotos = crud.listar_pilotos()
-                if pilotos.empty:
-                    st.info("No hay pilotos registrados.")
+                inicio = datetime.fromisoformat(proxima["inicio"]).replace(tzinfo=timezone.utc)
+                ahora = datetime.now(timezone.utc)
+                delta = inicio - ahora
+                dias = delta.days
+                horas, rem = divmod(delta.seconds, 3600)
+                minutos, segundos = divmod(rem, 60)
+                pista_name = str(proxima["pista"]).strip() if "pista" in proxima.keys() else ""
+                carrera_nombre = proxima["nombre"] if "nombre" in proxima.keys() else ""
+                kms = proxima["kms"] if "kms" in proxima.keys() else ""
+                vueltas = proxima["vueltas"] if "vueltas" in proxima.keys() else ""
+                round_val = proxima["round"] if "round" in proxima.keys() else ""
+                inicio_str = proxima["inicio"] if "inicio" in proxima.keys() else ""
+                import unicodedata
+                def normaliza(s):
+                    s = str(s).strip().lower()
+                    s = ''.join(c for c in unicodedata.normalize('NFD', s) if unicodedata.category(c) != 'Mn')
+                    return s
+                equivalencias_manual = {
+                    'melbourne': 'albert park circuit',
+                    'shanghai': 'shanghai international circuit',
+                    'suzuka': 'suzuka international racing course',
+                    'bahrain': 'bahrain international circuit',
+                    'jeddah': 'jeddah corniche circuit',
+                    'miami': 'miami international autodrome',
+                    'gilles villeneuve': 'circuit gilles-villeneuve',
+                    'montreal': 'circuit gilles-villeneuve',
+                    'monaco': 'circuit de monaco',
+                    'catalunya': 'circuit de barcelona-catalunya',
+                    'barcelona': 'circuit de barcelona-catalunya',
+                    'red bull ring': 'red bull ring',
+                    'silverstone': 'silverstone circuit',
+                    'spa-francorchamps': 'circuit de spa-francorchamps',
+                    'spa': 'circuit de spa-francorchamps',
+                    'hungaroring': 'hungaroring',
+                    'zandvoort': 'circuit zandvoort',
+                    'monza': 'autodromo nazionale monza',
+                    'madring': 'circuito de madring',
+                    'madrid': 'circuito de madring',
+                    'baku': 'baku city circuit',
+                    'marina bay': 'marina bay street circuit',
+                    'singapore': 'marina bay street circuit',
+                    'americas': 'circuit of the americas',
+                    'austin': 'circuit of the americas',
+                    'hermanos rodriguez': 'autodromo hermanos rodriguez',
+                    'mexico city': 'autodromo hermanos rodriguez',
+                    'jose carlos pace': 'autodromo jose carlos pace - interlagos',
+                    'interlagos': 'autodromo jose carlos pace - interlagos',
+                    'las vegas': 'las vegas street circuit',
+                    'lusail': 'losail international circuit',
+                    'yas marina': 'yas marina circuit',
+                }
+                pista_name_norm = normaliza(pista_name)
+                layout_key = pista_name_norm
+                if layout_key not in _CIRCUIT_LAYOUTS and pista_name_norm in equivalencias_manual:
+                    layout_key = normaliza(equivalencias_manual[pista_name_norm])
+                img_html = ""
+                if layout_key in _CIRCUIT_LAYOUTS:
+                    coords = _CIRCUIT_LAYOUTS[layout_key]
+                    layout_buf = _plot_layout_icon(coords, width=110, height=110)
+                    import base64
+                    layout_bytes = layout_buf.getvalue()
+                    layout_b64 = base64.b64encode(layout_bytes).decode('utf-8')
+                    img_html = f"<img src='data:image/png;base64,{layout_b64}' width='110' style='display:block;margin:auto;border-radius:8px;'/>"
                 else:
-                    piloto_ids = pilotos["id"].tolist()
+                    img_html = "<span style='color:#888;font-size:0.9rem;'>Sin layout</span>"
+                st.markdown(f"""
+                <div class="f1-card-modern">
+                    <div class="f1-countdown">{dias}d {horas:02}h {minutos:02}m {segundos:02}s</div>
+                    <div class="f1-layout-img">{img_html}</div>
+                    <div class="f1-card-header">R{round_val} · {pista_name}</div>
+                    <div class="f1-card-title">{carrera_nombre}</div>
+                    <div class="f1-card-meta">{inicio.strftime('%d %b %Y — %H:%M UTC')}</div>
+                    <div class="f1-card-footer">
+                        <span>{kms} km</span>
+                        <span>{vueltas} vueltas</span>
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+                st.caption("⏱️ Picks se bloquean 15 minutos antes del inicio")
 
-                    pick_existente = crud.obtener_pick_usuario(
-                        st.session_state.user_id,
-                        proxima["id"],
-                    )
+        # Bloque Mi Pick (derecha, solo usuarios no-admin)
+        with col_der:
+            if not st.session_state.is_admin:
+                st.subheader("Mi Pick (5° lugar)")
+                st.markdown("""
+                <style>
+                .mi-pick-center { display:flex; flex-direction:column; align-items:center; }
+                @media (max-width: 768px) {
+                    .mi-pick-center { align-items: center; text-align: center; }
+                }
+                </style>
+                """, unsafe_allow_html=True)
 
-                    if pick_existente and pick_existente["piloto_id"] in piloto_ids:
-                        index_inicial = piloto_ids.index(pick_existente["piloto_id"])
+                if not proxima:
+                    st.info("No hay próxima carrera disponible para hacer pick.")
+                else:
+                    pilotos = crud.listar_pilotos()
+                    if pilotos.empty:
+                        st.info("No hay pilotos registrados.")
                     else:
-                        index_inicial = 0
+                        piloto_ids = pilotos["id"].tolist()
 
-                    # Dropdown "escondido" que controla la tarjeta grande
-                    piloto_id = st.selectbox(
-                        label="",
-                        options=piloto_ids,
-                        index=index_inicial,
-                        format_func=lambda x: pilotos.loc[pilotos["id"] == x, "nombre"].values[0],
-                        key=f"dashboard_pick_{proxima['id']}",
-                        label_visibility="collapsed",
-                    )
-
-                    piloto_sel = pilotos[pilotos["id"] == piloto_id].iloc[0]
-
-                    img_path = _get_piloto_image_path(piloto_sel["codigo"])
-                    _driver_img_html = ""
-                    if img_path:
-                        _driver_bytes = Path(img_path).read_bytes()
-                        _driver_b64 = _b64.b64encode(_driver_bytes).decode("ascii")
-                        _driver_mime = {
-                            ".avif": "image/avif",
-                            ".png": "image/png",
-                            ".webp": "image/webp",
-                        }.get(Path(img_path).suffix.lower(), "image/jpeg")
-                        _driver_img_html = (
-                            '<div class="pick-driver-visual">'
-                            f'<img src="data:{_driver_mime};base64,{_driver_b64}" '
-                            f'alt="{piloto_sel["nombre"]}"/>'
-                            '</div>'
+                        pick_existente = crud.obtener_pick_usuario(
+                            st.session_state.user_id,
+                            proxima["id"],
                         )
-                    else:
-                        _foto_url = str(piloto_sel.get("foto_url") or "").strip()
-                        if _foto_url.startswith("https://"):
+
+                        if pick_existente and pick_existente["piloto_id"] in piloto_ids:
+                            index_inicial = piloto_ids.index(pick_existente["piloto_id"])
+                        else:
+                            index_inicial = 0
+
+                        # Dropdown "escondido" que controla la tarjeta grande
+                        piloto_id = st.selectbox(
+                            label="",
+                            options=piloto_ids,
+                            index=index_inicial,
+                            format_func=lambda x: pilotos.loc[pilotos["id"] == x, "nombre"].values[0],
+                            key=f"dashboard_pick_{proxima['id']}",
+                            label_visibility="collapsed",
+                        )
+
+                        piloto_sel = pilotos[pilotos["id"] == piloto_id].iloc[0]
+
+                        img_path = _get_piloto_image_path(piloto_sel["codigo"])
+                        _driver_img_html = ""
+                        if img_path:
+                            _driver_bytes = Path(img_path).read_bytes()
+                            _driver_b64 = _b64.b64encode(_driver_bytes).decode("ascii")
+                            _driver_mime = {
+                                ".avif": "image/avif",
+                                ".png": "image/png",
+                                ".webp": "image/webp",
+                            }.get(Path(img_path).suffix.lower(), "image/jpeg")
                             _driver_img_html = (
                                 '<div class="pick-driver-visual">'
-                                f'<img src="{html.escape(_foto_url, quote=True)}" '
-                                f'alt="{html.escape(str(piloto_sel["nombre"]), quote=True)}"/>'
+                                f'<img src="data:{_driver_mime};base64,{_driver_b64}" '
+                                f'alt="{piloto_sel["nombre"]}"/>'
                                 '</div>'
                             )
+                        else:
+                            _foto_url = str(piloto_sel.get("foto_url") or "").strip()
+                            if _foto_url.startswith("https://"):
+                                _driver_img_html = (
+                                    '<div class="pick-driver-visual">'
+                                    f'<img src="{html.escape(_foto_url, quote=True)}" '
+                                    f'alt="{html.escape(str(piloto_sel["nombre"]), quote=True)}"/>'
+                                    '</div>'
+                                )
 
-                    _team_code, _team_color = _team_badge(
-                        piloto_sel["escuderia"], piloto_sel.get("color_escuderia")
-                    )
-                    _driver_name = html.escape(str(piloto_sel["nombre"]))
-                    _driver_code = html.escape(str(piloto_sel["codigo"]))
-                    _driver_team = html.escape(str(piloto_sel["escuderia"] or ""))
+                        _team_code, _team_color = _team_badge(
+                            piloto_sel["escuderia"], piloto_sel.get("color_escuderia")
+                        )
+                        _driver_name = html.escape(str(piloto_sel["nombre"]))
+                        _driver_code = html.escape(str(piloto_sel["codigo"]))
+                        _driver_team = html.escape(str(piloto_sel["escuderia"] or ""))
 
-                    st.markdown(f"""
-                    <div class="pick-driver-card" style="--team-color:{_team_color}">
-                        {_driver_img_html}
-                        <div class="pick-driver-copy">
-                            <div class="pick-team-crest" aria-label="Escudo {_driver_team}">
-                                <span>{_team_code}</span>
+                        st.markdown(f"""
+                        <div class="pick-driver-card" style="--team-color:{_team_color}">
+                            {_driver_img_html}
+                            <div class="pick-driver-copy">
+                                <div class="pick-team-crest" aria-label="Escudo {_driver_team}">
+                                    <span>{_team_code}</span>
+                                </div>
+                                <div class="pick-driver-kicker">Tu elección para el 5° lugar</div>
+                                <div class="pick-driver-name">{_driver_name}</div>
+                                <div class="pick-driver-meta">{_driver_code} &nbsp;·&nbsp; {_driver_team}</div>
                             </div>
-                            <div class="pick-driver-kicker">Tu elección para el 5° lugar</div>
-                            <div class="pick-driver-name">{_driver_name}</div>
-                            <div class="pick-driver-meta">{_driver_code} &nbsp;·&nbsp; {_driver_team}</div>
                         </div>
-                    </div>
-                    """, unsafe_allow_html=True)
+                        """, unsafe_allow_html=True)
 
-                    if carrera_bloqueada(proxima["inicio"]):
-                        st.warning("La carrera ya está bloqueada para picks. No puedes cambiar tu selección.")
-                    else:
-                        if st.button("Guardar pick", key=f"dashboard_guardar_pick_{proxima['id']}", use_container_width=True):
-                            crud.guardar_pick(
-                                st.session_state.user_id,
-                                proxima["id"],
-                                int(piloto_id),
-                            )
-                            st.success("Pick guardado correctamente.")
-                            st.rerun()
+                        if carrera_bloqueada(proxima["inicio"]):
+                            st.warning("La carrera ya está bloqueada para picks. No puedes cambiar tu selección.")
+                        else:
+                            if st.button("Guardar pick", key=f"dashboard_guardar_pick_{proxima['id']}", use_container_width=True):
+                                crud.guardar_pick(
+                                    st.session_state.user_id,
+                                    proxima["id"],
+                                    int(piloto_id),
+                                )
+                                st.success("Pick guardado correctamente.")
+                                st.rerun()
 
-            # Lista "Five Fives All Time" (top 5 pilotos más elegidos), muy compacta
-            top_picks = crud.top_picks_global(temporada_id)
+                # Lista "Five Fives All Time" (top 5 pilotos más elegidos), muy compacta
+                top_picks = crud.top_picks_global(temporada_id)
 
-            if top_picks.empty:
-                st.info("Aún no hay picks registrados")
-            else:
-                top5 = top_picks.head(5)
-                items = []
-                for i, row in enumerate(top5.itertuples(), start=1):
-                    items.append(f"{i}. {row.piloto_nombre} — {row.pick_count} picks")
-
-                lista_html = "<br/>".join(items)
-                st.markdown(
-                    f"""
-                    <div class="top-picks-card">
-                        <div class="top-picks-title">Five Fives All Time</div>
-                        {lista_html}
-                    </div>
-                    """,
-                    unsafe_allow_html=True,
-                )
-
-    st.divider()
-
-    # =========================
-    # TABLA GENERAL (STANDINGS + CARRERAS)
-    # =========================
-    st.subheader("📈 Standings General")
-
-    if not progreso.empty:
-        # Matriz resumen: filas = usuarios, columnas = carreras, con total al inicio
-        matriz = (
-            progreso
-            .pivot_table(
-                index="username",
-                columns="round",
-                values="puntos",
-                aggfunc="sum",
-                fill_value=0,
-            )
-            .sort_index(axis=1)
-        )
-
-        totales = progreso.groupby("username")['puntos'].sum()
-        matriz.insert(0, "Total", totales)
-        matriz = matriz.sort_values("Total", ascending=False)
-        matriz = matriz.reset_index()
-        matriz["rank"] = matriz.index + 1
-
-        # Calcular ranking anterior (ronda previa)
-        race_cols = [c for c in matriz.columns if isinstance(c, (int, float))]
-        race_cols = sorted(race_cols)
-        if len(race_cols) > 0:
-            last_round = race_cols[-1]
-            prev_round = race_cols[-2] if len(race_cols) > 1 else None
-        else:
-            last_round = prev_round = None
-
-        # Ranking actual (por totales)
-        usernames = matriz["username"].tolist()
-        curr_ranking = {u: i+1 for i, u in enumerate(usernames)}
-
-        # Ranking anterior: sumar puntos solo hasta prev_round
-        prev_ranking = {}
-        if prev_round is not None:
-            matriz_prev = matriz.set_index("username")
-            prev_totals = (matriz_prev[race_cols]
-                .loc[:, [c for c in race_cols if c <= prev_round]]
-                .sum(axis=1)
-            )
-            prev_sorted = prev_totals.sort_values(ascending=False)
-            for i, u in enumerate(prev_sorted.index):
-                prev_ranking[u] = i+1
-
-        # Decorar nombres
-        def _decorar_usuario(row):
-            nombre = row["username"]
-            r = row["rank"]
-            if r == 1:
-                return f"{nombre} 🥇👑"
-            if r == 2:
-                return f"{nombre} 🥈"
-            if r == 3:
-                return f"{nombre} 🥉"
-            return nombre
-        matriz["Usuario"] = matriz.apply(_decorar_usuario, axis=1)
-
-        # Asignar un color fijo por usuario (para tabla y gráfica)
-        palette = [
-            "#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd",
-            "#8c564b", "#e377c2", "#7f7f7f", "#bcbd22", "#17becf",
-        ]
-        user_color = {u: palette[i % len(palette)] for i, u in enumerate(usernames)}
-
-        # Mapas foto y escudería desde usuarios_puntos
-        import base64 as _b64_st
-        def _mime_from_b64(b64str: str) -> str:
-            if not b64str:
-                return "image/jpeg"
-            h = b64str[:12]
-            if h.startswith("/9j/"):
-                return "image/jpeg"
-            if h.startswith("iVBOR"):
-                return "image/png"
-            if h.startswith("UklGR"):
-                return "image/webp"
-            if h.startswith("R0lG"):
-                return "image/gif"
-            return "image/jpeg"
-        _foto_map_st = {}
-        _esc_map_st = {}
-        if not usuarios_puntos.empty:
-            if "foto_perfil" in usuarios_puntos.columns:
-                _foto_map_st = dict(zip(usuarios_puntos["username"], usuarios_puntos["foto_perfil"].fillna("")))
-            if "escuderia" in usuarios_puntos.columns:
-                _esc_map_st = dict(zip(usuarios_puntos["username"], usuarios_puntos["escuderia"].fillna("")))
-        def _build_foto_url(uname):
-            fp = _foto_map_st.get(uname, "")
-            if fp:
-                return f"data:{_mime_from_b64(fp)};base64,{fp}"
-            esc = _esc_map_st.get(uname, uname)
-            ini = (esc or uname or "?")[0].upper()
-            svg = (
-                f'<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64">'
-                f'<circle cx="32" cy="32" r="32" fill="#2e3140"/>'
-                f'<text x="32" y="44" text-anchor="middle" font-size="28" '
-                f'font-family="Arial" font-weight="bold" fill="#00eaff">{ini}</text></svg>'
-            )
-            return "data:image/svg+xml;base64," + _b64_st.b64encode(svg.encode()).decode()
-
-        # Orden final: tabla HTML custom con fotos circulares
-        race_col_names = [f"R{int(c)}" for c in race_cols]
-        row_colors   = [user_color[u] for u in usernames]
-        row_ranks    = [f"#{r}" for r in matriz["rank"].tolist()]
-        foto_urls    = [_build_foto_url(u) for u in usernames]
-        totales_disp = matriz["Total"].tolist()
-        usuario_disp = []
-        for row in matriz.itertuples():
-            usuario_disp.append(_decorar_usuario(row._asdict() if hasattr(row, '_asdict') else {"username": row.username, "rank": row.rank}))
-        usuario_disp = []
-        for i, uname in enumerate(usernames):
-            r = i + 1
-            if r == 1:   usuario_disp.append(f"{uname} 🥇👑")
-            elif r == 2: usuario_disp.append(f"{uname} 🥈")
-            elif r == 3: usuario_disp.append(f"{uname} 🥉")
-            else:        usuario_disp.append(uname)
-
-        race_values = {}
-        for rc, rc_name in zip(race_cols, race_col_names):
-            race_values[rc_name] = matriz[rc].tolist()
-
-        # Construir cabecera
-        th_style = "padding:6px 10px;text-align:center;color:#00eaff;font-size:0.82rem;border-bottom:1px solid #333;"
-        th_narrow = th_style + "min-width:44px;max-width:54px;width:1%;padding-left:2px;padding-right:2px;"
-        headers_html = (
-            f'<th style="{th_style}"></th>'
-            f'<th style="{th_narrow}">#</th>'
-            f'<th style="{th_narrow}">Δ Pos</th>'
-            f'<th style="{th_style};text-align:left;">Escudería</th>'
-            f'<th style="{th_style}">Total</th>'
-        )
-        for rc_name in race_col_names:
-            headers_html += f'<th style="{th_style}">{rc_name}</th>'
-
-        # Construir filas
-        rows_html = ""
-        for i in range(len(usernames)):
-            bg = "#1e2128" if i % 2 == 0 else "#23272f"
-            td = f"padding:7px 10px;text-align:center;vertical-align:middle;font-size:0.88rem;color:#ddd;"
-            img_tag = f'<img src="{foto_urls[i]}" style="width:38px;height:38px;border-radius:50%;object-fit:cover;border:2px solid #00eaff;display:block;margin:auto;"/>'
-            uname = usernames[i]
-            curr_rank = curr_ranking.get(uname, None)
-            prev_rank = prev_ranking.get(uname, None) if prev_round is not None else None
-            # Indicador de cambio de posición (columna separada)
-            if prev_rank is not None and curr_rank is not None:
-                diff = prev_rank - curr_rank
-                if diff > 0:
-                    arrow = f'<span style="color:#00ff55;font-size:1.1em;vertical-align:middle;">▲</span> <span style="color:#00ff55;font-size:0.95em;">{diff}</span>'
-                elif diff < 0:
-                    arrow = f'<span style="color:#ff4444;font-size:1.1em;vertical-align:middle;">▼</span> <span style="color:#ff4444;font-size:0.95em;">{abs(diff)}</span>'
+                if top_picks.empty:
+                    st.info("Aún no hay picks registrados")
                 else:
-                    arrow = f'<span style="color:#aaa;font-size:1.1em;vertical-align:middle;">●</span>'
+                    top5 = top_picks.head(5)
+                    items = []
+                    for i, row in enumerate(top5.itertuples(), start=1):
+                        items.append(f"{i}. {row.piloto_nombre} — {row.pick_count} picks")
+
+                    lista_html = "<br/>".join(items)
+                    st.markdown(
+                        f"""
+                        <div class="top-picks-card">
+                            <div class="top-picks-title">Five Fives All Time</div>
+                            {lista_html}
+                        </div>
+                        """,
+                        unsafe_allow_html=True,
+                    )
+
+        st.divider()
+
+        # =========================
+        # TABLA GENERAL (STANDINGS + CARRERAS)
+        # =========================
+        st.subheader("📈 Standings General")
+
+        if not progreso.empty:
+            # Matriz resumen: filas = usuarios, columnas = carreras, con total al inicio
+            matriz = (
+                progreso
+                .pivot_table(
+                    index="username",
+                    columns="round",
+                    values="puntos",
+                    aggfunc="sum",
+                    fill_value=0,
+                )
+                .sort_index(axis=1)
+            )
+
+            totales = progreso.groupby("username")['puntos'].sum()
+            matriz.insert(0, "Total", totales)
+            matriz = matriz.sort_values("Total", ascending=False)
+            matriz = matriz.reset_index()
+            matriz["rank"] = matriz.index + 1
+
+            # Calcular ranking anterior (ronda previa)
+            race_cols = [c for c in matriz.columns if isinstance(c, (int, float))]
+            race_cols = sorted(race_cols)
+            if len(race_cols) > 0:
+                last_round = race_cols[-1]
+                prev_round = race_cols[-2] if len(race_cols) > 1 else None
             else:
-                arrow = ""
-            rank_badge = f'<span style="background:{row_colors[i]};color:#fff;font-weight:800;padding:2px 7px;border-radius:8px;font-size:0.85rem;">{row_ranks[i]}</span>'
-            user_cell = f'<td style="{td};text-align:left;">{usuario_disp[i]}</td>'
-            total_cell = f'<td style="{td};font-weight:700;color:#00eaff;">{int(totales_disp[i])}</td>'
-            race_cells = "".join(
-                f'<td style="{td}">{int(race_values[rc_name][i])}</td>'
-                for rc_name in race_col_names
-            )
-            td_narrow = td + "min-width:44px;max-width:54px;width:1%;padding-left:2px;padding-right:2px;"
-            rows_html += (
-                f'<tr style="background:{bg};">'
-                f'<td style="{td};">{img_tag}</td>'
-                f'<td style="{td_narrow}">{rank_badge}</td>'
-                f'<td style="{td_narrow}">{arrow}</td>'
-                f'{user_cell}{total_cell}{race_cells}'
-                f'</tr>'
-            )
+                last_round = prev_round = None
 
-        standings_html = f"""
-        <div style="overflow-x:auto;">
-        <table style="width:100%;border-collapse:collapse;font-family:sans-serif;">
-          <thead><tr style="background:#16181e;">{headers_html}</tr></thead>
-          <tbody>{rows_html}</tbody>
-        </table>
-        </div>
-        """
-        st.markdown(standings_html, unsafe_allow_html=True)
+            # Ranking actual (por totales)
+            usernames = matriz["username"].tolist()
+            curr_ranking = {u: i+1 for i, u in enumerate(usernames)}
 
-        # Gráfica de líneas usando puntos acumulados por round, con eje Y >= 0
-        pivot_chart = (
-            progreso
-            .pivot(index="round", columns="username", values="puntos_acum")
-            .sort_index()
-        )
+            # Ranking anterior: sumar puntos solo hasta prev_round
+            prev_ranking = {}
+            if prev_round is not None:
+                matriz_prev = matriz.set_index("username")
+                prev_totals = (matriz_prev[race_cols]
+                    .loc[:, [c for c in race_cols if c <= prev_round]]
+                    .sum(axis=1)
+                )
+                prev_sorted = prev_totals.sort_values(ascending=False)
+                for i, u in enumerate(prev_sorted.index):
+                    prev_ranking[u] = i+1
 
-        chart_df = (
-            pivot_chart
-            .reset_index()
-            .melt(id_vars=["round"], var_name="Usuario", value_name="PuntosAcum")
-        )
+            # Decorar nombres
+            def _decorar_usuario(row):
+                nombre = row["username"]
+                r = row["rank"]
+                if r == 1:
+                    return f"{nombre} 🥇👑"
+                if r == 2:
+                    return f"{nombre} 🥈"
+                if r == 3:
+                    return f"{nombre} 🥉"
+                return nombre
+            matriz["Usuario"] = matriz.apply(_decorar_usuario, axis=1)
 
-        max_y = float(chart_df["PuntosAcum"].max() or 0)
-
-        # Agregar punto de origen (round 0, PuntosAcum 0) para que las líneas parte del origen
-        import pandas as _pd_orig
-        _origin_rows = [{"round": 0, "Usuario": u, "PuntosAcum": 0} for u in chart_df["Usuario"].unique()]
-        chart_df = _pd_orig.concat([_pd_orig.DataFrame(_origin_rows), chart_df], ignore_index=True)
-
-        chart = (
-            alt.Chart(chart_df)
-            .mark_line(point=True)
-            .encode(
-                x=alt.X(
-                    "round:Q",
-                    title="Round",
-                    axis=alt.Axis(grid=False),
-                ),
-                y=alt.Y(
-                    "PuntosAcum:Q",
-                    title="Puntos acumulados",
-                    scale=alt.Scale(domain=[0, max_y + 1 if max_y > 0 else 1]),
-                    axis=alt.Axis(grid=True, tickCount=5),
-                ),
-                color=alt.Color(
-                    "Usuario:N",
-                    scale=alt.Scale(
-                        domain=list(user_color.keys()),
-                        range=list(user_color.values()),
-                    ),
-                    legend=None,
-                ),
-            )
-        )
-
-        st.altair_chart(chart, use_container_width=True)
-
-        # ─── EXPORTAR JPG ───────────────────────────────────────────────
-        def _generar_jpg_standings():
-            import io as _io_jpg
-            import matplotlib.pyplot as _mplt
-            import matplotlib.patches as _pat
-
-            BG, BG2, CYAN = '#16181e', '#1e2128', '#00eaff'
-            n = len(usernames)
-
-            ROW_H   = 0.48          # pulgadas por fila
-            TABLE_H = ROW_H * (n + 1.5)
-            CHART_H = 4.5
-            FIG_W   = 8.0
-
-            fig, (ax_t, ax_c) = _mplt.subplots(
-                2, 1, facecolor=BG,
-                figsize=(FIG_W, TABLE_H + CHART_H + 0.8),
-                gridspec_kw={'height_ratios': [TABLE_H, CHART_H], 'hspace': 0.55}
-            )
-
-            # ── TABLA MANUAL ───────────────────────────────────────────
-            ax_t.set_facecolor(BG)
-            ax_t.set_xlim(0, 1)
-            ax_t.set_ylim(0, 1)
-            ax_t.axis('off')
-            ax_t.set_title('Standings General', color=CYAN,
-                           fontsize=13, fontweight='bold', pad=8)
-
-            total_rows = n + 1           # 1 header + n datos
-            rh = 1.0 / total_rows        # altura normalizada por fila
-
-            # columnas: x_inicio, ancho, alineación
-            cols_def = [
-                (0.00, 0.14, 'center'),  # Pos
-                (0.14, 0.62, 'left'),    # Usuario
-                (0.76, 0.24, 'center'),  # Puntos
+            # Asignar un color fijo por usuario (para tabla y gráfica)
+            palette = [
+                "#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd",
+                "#8c564b", "#e377c2", "#7f7f7f", "#bcbd22", "#17becf",
             ]
-            headers = ['Pos', 'Usuario', 'Puntos']
+            user_color = {u: palette[i % len(palette)] for i, u in enumerate(usernames)}
 
-            # cabecera
-            for (x, w, align), label in zip(cols_def, headers):
-                ax_t.add_patch(_pat.Rectangle(
-                    (x, 1 - rh), w, rh, transform=ax_t.transAxes,
-                    facecolor='#0a0c12', edgecolor='#333', linewidth=0.8, clip_on=False
-                ))
-                tx = x + 0.01 if align == 'left' else x + w / 2
-                ha = align
-                ax_t.text(tx, 1 - rh / 2, label, color=CYAN, fontweight='bold',
-                          fontsize=9.5, ha=ha, va='center',
-                          transform=ax_t.transAxes)
+            # Mapas foto y escudería desde usuarios_puntos
+            import base64 as _b64_st
+            def _mime_from_b64(b64str: str) -> str:
+                if not b64str:
+                    return "image/jpeg"
+                h = b64str[:12]
+                if h.startswith("/9j/"):
+                    return "image/jpeg"
+                if h.startswith("iVBOR"):
+                    return "image/png"
+                if h.startswith("UklGR"):
+                    return "image/webp"
+                if h.startswith("R0lG"):
+                    return "image/gif"
+                return "image/jpeg"
+            _foto_map_st = {}
+            _esc_map_st = {}
+            if not usuarios_puntos.empty:
+                if "foto_perfil" in usuarios_puntos.columns:
+                    _foto_map_st = dict(zip(usuarios_puntos["username"], usuarios_puntos["foto_perfil"].fillna("")))
+                if "escuderia" in usuarios_puntos.columns:
+                    _esc_map_st = dict(zip(usuarios_puntos["username"], usuarios_puntos["escuderia"].fillna("")))
+            def _build_foto_url(uname):
+                fp = _foto_map_st.get(uname, "")
+                if fp:
+                    return f"data:{_mime_from_b64(fp)};base64,{fp}"
+                esc = _esc_map_st.get(uname, uname)
+                ini = (esc or uname or "?")[0].upper()
+                svg = (
+                    f'<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64">'
+                    f'<circle cx="32" cy="32" r="32" fill="#2e3140"/>'
+                    f'<text x="32" y="44" text-anchor="middle" font-size="28" '
+                    f'font-family="Arial" font-weight="bold" fill="#00eaff">{ini}</text></svg>'
+                )
+                return "data:image/svg+xml;base64," + _b64_st.b64encode(svg.encode()).decode()
 
-            # filas de datos
+            # Orden final: tabla HTML custom con fotos circulares
+            race_col_names = [f"R{int(c)}" for c in race_cols]
+            row_colors   = [user_color[u] for u in usernames]
+            row_ranks    = [f"#{r}" for r in matriz["rank"].tolist()]
+            foto_urls    = [_build_foto_url(u) for u in usernames]
+            totales_disp = matriz["Total"].tolist()
+            usuario_disp = []
+            for row in matriz.itertuples():
+                usuario_disp.append(_decorar_usuario(row._asdict() if hasattr(row, '_asdict') else {"username": row.username, "rank": row.rank}))
+            usuario_disp = []
             for i, uname in enumerate(usernames):
-                y0  = 1 - rh * (i + 2)
-                bg  = BG2 if i % 2 == 0 else '#23272f'
-                pos_str = f"#{i+1}"
-                vals = [pos_str, uname, str(int(totales_disp[i]))]
-                bgs  = [user_color[uname], bg, bg]
-                fgs  = ['#ffffff', '#dddddd', CYAN]
-                fws  = ['bold', 'normal', 'bold']
+                r = i + 1
+                if r == 1:   usuario_disp.append(f"{uname} 🥇👑")
+                elif r == 2: usuario_disp.append(f"{uname} 🥈")
+                elif r == 3: usuario_disp.append(f"{uname} 🥉")
+                else:        usuario_disp.append(uname)
 
-                for (x, w, align), val, cbg, cfg, cfw in zip(cols_def, vals, bgs, fgs, fws):
-                    ax_t.add_patch(_pat.Rectangle(
-                        (x, y0), w, rh, transform=ax_t.transAxes,
-                        facecolor=cbg, edgecolor='#2a2d38', linewidth=0.5, clip_on=False
-                    ))
-                    pad   = 0.01 if align == 'left' else 0.0
-                    tx    = x + pad + (0 if align == 'left' else w / 2)
-                    ha    = 'left' if align == 'left' else 'center'
-                    ax_t.text(tx, y0 + rh / 2, val, color=cfg, fontweight=cfw,
-                              fontsize=9, ha=ha, va='center',
-                              transform=ax_t.transAxes)
+            race_values = {}
+            for rc, rc_name in zip(race_cols, race_col_names):
+                race_values[rc_name] = matriz[rc].tolist()
 
-            # ── GRÁFICA: acumulado por round ───────────────────────────
-            ax_c.set_facecolor(BG2)
-            for sp in ax_c.spines.values(): sp.set_color('#333')
-            ax_c.tick_params(colors='#aaa')
-            ax_c.set_title('Evolución de Puntos', color=CYAN,
-                           fontsize=12, fontweight='bold')
-            ax_c.set_xlabel('Round', color='#aaa', fontsize=9)
-            ax_c.set_ylabel('Puntos acumulados', color='#aaa', fontsize=9)
-            ax_c.set_ylim(bottom=0)
-            ax_c.grid(axis='y', color='#2a2d38', alpha=0.7, linewidth=0.8)
+            # Construir cabecera
+            th_style = "padding:6px 10px;text-align:center;color:#00eaff;font-size:0.82rem;border-bottom:1px solid #333;"
+            th_narrow = th_style + "min-width:44px;max-width:54px;width:1%;padding-left:2px;padding-right:2px;"
+            headers_html = (
+                f'<th style="{th_style}"></th>'
+                f'<th style="{th_narrow}">#</th>'
+                f'<th style="{th_narrow}">Δ Pos</th>'
+                f'<th style="{th_style};text-align:left;">Escudería</th>'
+                f'<th style="{th_style}">Total</th>'
+            )
+            for rc_name in race_col_names:
+                headers_html += f'<th style="{th_style}">{rc_name}</th>'
 
-            # Usar exactamente la misma fuente de datos que Altair: chart_df
-            # chart_df contiene filas (round, Usuario, PuntosAcum) y ya incluye el origen (round=0)
-            try:
-                _chart = chart_df.copy()
-            except NameError:
-                # En caso de que chart_df no esté en scope por alguna razón, reconstruirlo
-                _pivot = (
-                    progreso
-                    .pivot(index="round", columns="username", values="puntos_acum")
-                    .sort_index()
+            # Construir filas
+            rows_html = ""
+            for i in range(len(usernames)):
+                bg = "#1e2128" if i % 2 == 0 else "#23272f"
+                td = f"padding:7px 10px;text-align:center;vertical-align:middle;font-size:0.88rem;color:#ddd;"
+                img_tag = f'<img src="{foto_urls[i]}" style="width:38px;height:38px;border-radius:50%;object-fit:cover;border:2px solid #00eaff;display:block;margin:auto;"/>'
+                uname = usernames[i]
+                curr_rank = curr_ranking.get(uname, None)
+                prev_rank = prev_ranking.get(uname, None) if prev_round is not None else None
+                # Indicador de cambio de posición (columna separada)
+                if prev_rank is not None and curr_rank is not None:
+                    diff = prev_rank - curr_rank
+                    if diff > 0:
+                        arrow = f'<span style="color:#00ff55;font-size:1.1em;vertical-align:middle;">▲</span> <span style="color:#00ff55;font-size:0.95em;">{diff}</span>'
+                    elif diff < 0:
+                        arrow = f'<span style="color:#ff4444;font-size:1.1em;vertical-align:middle;">▼</span> <span style="color:#ff4444;font-size:0.95em;">{abs(diff)}</span>'
+                    else:
+                        arrow = f'<span style="color:#aaa;font-size:1.1em;vertical-align:middle;">●</span>'
+                else:
+                    arrow = ""
+                rank_badge = f'<span style="background:{row_colors[i]};color:#fff;font-weight:800;padding:2px 7px;border-radius:8px;font-size:0.85rem;">{row_ranks[i]}</span>'
+                user_cell = f'<td style="{td};text-align:left;">{usuario_disp[i]}</td>'
+                total_cell = f'<td style="{td};font-weight:700;color:#00eaff;">{int(totales_disp[i])}</td>'
+                race_cells = "".join(
+                    f'<td style="{td}">{int(race_values[rc_name][i])}</td>'
+                    for rc_name in race_col_names
                 )
-                _chart = (
-                    _pivot
-                    .reset_index()
-                    .melt(id_vars=["round"], var_name="Usuario", value_name="PuntosAcum")
+                td_narrow = td + "min-width:44px;max-width:54px;width:1%;padding-left:2px;padding-right:2px;"
+                rows_html += (
+                    f'<tr style="background:{bg};">'
+                    f'<td style="{td};">{img_tag}</td>'
+                    f'<td style="{td_narrow}">{rank_badge}</td>'
+                    f'<td style="{td_narrow}">{arrow}</td>'
+                    f'{user_cell}{total_cell}{race_cells}'
+                    f'</tr>'
                 )
-                import pandas as _pd_tmp
-                _origin_rows = [{"round": 0, "Usuario": u, "PuntosAcum": 0} for u in _chart["Usuario"].unique()]
-                _chart = _pd_tmp.concat([_pd_tmp.DataFrame(_origin_rows), _chart], ignore_index=True)
 
-            # asegurar orden por round
-            _chart = _chart.sort_values(["Usuario", "round"]).reset_index(drop=True)
-            rounds = sorted(_chart['round'].unique())
-            max_y = float(_chart['PuntosAcum'].max() or 0)
+            standings_html = f"""
+            <div style="overflow-x:auto;">
+            <table style="width:100%;border-collapse:collapse;font-family:sans-serif;">
+              <thead><tr style="background:#16181e;">{headers_html}</tr></thead>
+              <tbody>{rows_html}</tbody>
+            </table>
+            </div>
+            """
+            st.markdown(standings_html, unsafe_allow_html=True)
 
-            for uname in usernames:
-                udf = _chart[_chart['Usuario'] == uname].sort_values('round')
-                xs = list(udf['round'])
-                ys = list(udf['PuntosAcum'])
-                if len(xs) == 0:
-                    continue
-                ax_c.plot(xs, ys, color=user_color.get(uname, '#888888'), marker='o',
-                          linewidth=2.2, markersize=4, label=uname)
-                # etiqueta final con entero
-                ax_c.annotate(f"{uname} ({int(ys[-1])})",
-                              xy=(xs[-1], ys[-1]), xytext=(6, 0), textcoords='offset points',
-                              color=user_color.get(uname, '#dddddd'), fontsize=7.5, va='center')
+            # Gráfica de líneas usando puntos acumulados por round, con eje Y >= 0
+            pivot_chart = (
+                progreso
+                .pivot(index="round", columns="username", values="puntos_acum")
+                .sort_index()
+            )
 
-            # fijar ticks y límites coherentes con Altair
-            ax_c.set_xticks(rounds)
-            ax_c.set_xticklabels([f"R{int(r)}" for r in rounds], color='#aaaaaa', fontsize=8)
-            ax_c.set_ylim(0, max_y + max(1, int(max_y * 0.05)))
+            chart_df = (
+                pivot_chart
+                .reset_index()
+                .melt(id_vars=["round"], var_name="Usuario", value_name="PuntosAcum")
+            )
 
-            ax_c.legend(loc='upper left', fontsize=8, framealpha=0.3,
-                        facecolor=BG2, edgecolor='#444', labelcolor='#ddd', ncol=2)
+            max_y = float(chart_df["PuntosAcum"].max() or 0)
 
-            buf = _io_jpg.BytesIO()
-            _mplt.savefig(buf, format='jpeg', dpi=150,
-                          bbox_inches='tight', facecolor=BG)
-            _mplt.close(fig)
-            buf.seek(0)
-            return buf.getvalue()
+            # Agregar punto de origen (round 0, PuntosAcum 0) para que las líneas parte del origen
+            import pandas as _pd_orig
+            _origin_rows = [{"round": 0, "Usuario": u, "PuntosAcum": 0} for u in chart_df["Usuario"].unique()]
+            chart_df = _pd_orig.concat([_pd_orig.DataFrame(_origin_rows), chart_df], ignore_index=True)
 
-        _c1, _ = st.columns([1, 5])
-        with _c1:
-            if st.button("📸 Exportar JPG", key="btn_export_jpg_standings"):
-                st.download_button(
-                    label="⬇️ Descargar standings.jpg",
-                    data=_generar_jpg_standings(),
-                    file_name="standings_f1.jpg",
-                    mime="image/jpeg",
-                    key="dl_standings_jpg",
-                )
-        # ────────────────────────────────────────────────────────────────
-
-    else:
-        # Sin resultados aún: mostrar gráfica vacía con ejes
-        palette = [
-            "#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd",
-            "#8c564b", "#e377c2", "#7f7f7f", "#bcbd22", "#17becf",
-        ]
-        if not usuarios_puntos.empty:
-            _nombres = usuarios_puntos["username"].tolist()
-            user_color = {u: palette[i % len(palette)] for i, u in enumerate(_nombres)}
-            _zero_rows = [{"round": 0, "Usuario": u, "PuntosAcum": 0} for u in _nombres]
-            import pandas as _pd_tmp
-            chart_df_vacio = _pd_tmp.DataFrame(_zero_rows)
-            chart_vacio = (
-                alt.Chart(chart_df_vacio)
+            chart = (
+                alt.Chart(chart_df)
                 .mark_line(point=True)
                 .encode(
-                    x=alt.X("round:Q", title="Round", axis=alt.Axis(grid=False)),
-                    y=alt.Y("PuntosAcum:Q", title="Puntos acumulados",
-                            scale=alt.Scale(domain=[0, 1]),
-                            axis=alt.Axis(grid=True, tickCount=5)),
+                    x=alt.X(
+                        "round:Q",
+                        title="Round",
+                        axis=alt.Axis(grid=False),
+                    ),
+                    y=alt.Y(
+                        "PuntosAcum:Q",
+                        title="Puntos acumulados",
+                        scale=alt.Scale(domain=[0, max_y + 1 if max_y > 0 else 1]),
+                        axis=alt.Axis(grid=True, tickCount=5),
+                    ),
                     color=alt.Color(
                         "Usuario:N",
                         scale=alt.Scale(
@@ -2009,9 +1839,191 @@ if menu == "Dashboard":
                     ),
                 )
             )
-            st.altair_chart(chart_vacio, use_container_width=True)
+
+            st.altair_chart(chart, use_container_width=True)
+
+            # ─── EXPORTAR JPG ───────────────────────────────────────────────
+            def _generar_jpg_standings():
+                import io as _io_jpg
+                import matplotlib.pyplot as _mplt
+                import matplotlib.patches as _pat
+
+                BG, BG2, CYAN = '#16181e', '#1e2128', '#00eaff'
+                n = len(usernames)
+
+                ROW_H   = 0.48          # pulgadas por fila
+                TABLE_H = ROW_H * (n + 1.5)
+                CHART_H = 4.5
+                FIG_W   = 8.0
+
+                fig, (ax_t, ax_c) = _mplt.subplots(
+                    2, 1, facecolor=BG,
+                    figsize=(FIG_W, TABLE_H + CHART_H + 0.8),
+                    gridspec_kw={'height_ratios': [TABLE_H, CHART_H], 'hspace': 0.55}
+                )
+
+                # ── TABLA MANUAL ───────────────────────────────────────────
+                ax_t.set_facecolor(BG)
+                ax_t.set_xlim(0, 1)
+                ax_t.set_ylim(0, 1)
+                ax_t.axis('off')
+                ax_t.set_title('Standings General', color=CYAN,
+                               fontsize=13, fontweight='bold', pad=8)
+
+                total_rows = n + 1           # 1 header + n datos
+                rh = 1.0 / total_rows        # altura normalizada por fila
+
+                # columnas: x_inicio, ancho, alineación
+                cols_def = [
+                    (0.00, 0.14, 'center'),  # Pos
+                    (0.14, 0.62, 'left'),    # Usuario
+                    (0.76, 0.24, 'center'),  # Puntos
+                ]
+                headers = ['Pos', 'Usuario', 'Puntos']
+
+                # cabecera
+                for (x, w, align), label in zip(cols_def, headers):
+                    ax_t.add_patch(_pat.Rectangle(
+                        (x, 1 - rh), w, rh, transform=ax_t.transAxes,
+                        facecolor='#0a0c12', edgecolor='#333', linewidth=0.8, clip_on=False
+                    ))
+                    tx = x + 0.01 if align == 'left' else x + w / 2
+                    ha = align
+                    ax_t.text(tx, 1 - rh / 2, label, color=CYAN, fontweight='bold',
+                              fontsize=9.5, ha=ha, va='center',
+                              transform=ax_t.transAxes)
+
+                # filas de datos
+                for i, uname in enumerate(usernames):
+                    y0  = 1 - rh * (i + 2)
+                    bg  = BG2 if i % 2 == 0 else '#23272f'
+                    pos_str = f"#{i+1}"
+                    vals = [pos_str, uname, str(int(totales_disp[i]))]
+                    bgs  = [user_color[uname], bg, bg]
+                    fgs  = ['#ffffff', '#dddddd', CYAN]
+                    fws  = ['bold', 'normal', 'bold']
+
+                    for (x, w, align), val, cbg, cfg, cfw in zip(cols_def, vals, bgs, fgs, fws):
+                        ax_t.add_patch(_pat.Rectangle(
+                            (x, y0), w, rh, transform=ax_t.transAxes,
+                            facecolor=cbg, edgecolor='#2a2d38', linewidth=0.5, clip_on=False
+                        ))
+                        pad   = 0.01 if align == 'left' else 0.0
+                        tx    = x + pad + (0 if align == 'left' else w / 2)
+                        ha    = 'left' if align == 'left' else 'center'
+                        ax_t.text(tx, y0 + rh / 2, val, color=cfg, fontweight=cfw,
+                                  fontsize=9, ha=ha, va='center',
+                                  transform=ax_t.transAxes)
+
+                # ── GRÁFICA: acumulado por round ───────────────────────────
+                ax_c.set_facecolor(BG2)
+                for sp in ax_c.spines.values(): sp.set_color('#333')
+                ax_c.tick_params(colors='#aaa')
+                ax_c.set_title('Evolución de Puntos', color=CYAN,
+                               fontsize=12, fontweight='bold')
+                ax_c.set_xlabel('Round', color='#aaa', fontsize=9)
+                ax_c.set_ylabel('Puntos acumulados', color='#aaa', fontsize=9)
+                ax_c.set_ylim(bottom=0)
+                ax_c.grid(axis='y', color='#2a2d38', alpha=0.7, linewidth=0.8)
+
+                # Usar exactamente la misma fuente de datos que Altair: chart_df
+                # chart_df contiene filas (round, Usuario, PuntosAcum) y ya incluye el origen (round=0)
+                try:
+                    _chart = chart_df.copy()
+                except NameError:
+                    # En caso de que chart_df no esté en scope por alguna razón, reconstruirlo
+                    _pivot = (
+                        progreso
+                        .pivot(index="round", columns="username", values="puntos_acum")
+                        .sort_index()
+                    )
+                    _chart = (
+                        _pivot
+                        .reset_index()
+                        .melt(id_vars=["round"], var_name="Usuario", value_name="PuntosAcum")
+                    )
+                    import pandas as _pd_tmp
+                    _origin_rows = [{"round": 0, "Usuario": u, "PuntosAcum": 0} for u in _chart["Usuario"].unique()]
+                    _chart = _pd_tmp.concat([_pd_tmp.DataFrame(_origin_rows), _chart], ignore_index=True)
+
+                # asegurar orden por round
+                _chart = _chart.sort_values(["Usuario", "round"]).reset_index(drop=True)
+                rounds = sorted(_chart['round'].unique())
+                max_y = float(_chart['PuntosAcum'].max() or 0)
+
+                for uname in usernames:
+                    udf = _chart[_chart['Usuario'] == uname].sort_values('round')
+                    xs = list(udf['round'])
+                    ys = list(udf['PuntosAcum'])
+                    if len(xs) == 0:
+                        continue
+                    ax_c.plot(xs, ys, color=user_color.get(uname, '#888888'), marker='o',
+                              linewidth=2.2, markersize=4, label=uname)
+                    # etiqueta final con entero
+                    ax_c.annotate(f"{uname} ({int(ys[-1])})",
+                                  xy=(xs[-1], ys[-1]), xytext=(6, 0), textcoords='offset points',
+                                  color=user_color.get(uname, '#dddddd'), fontsize=7.5, va='center')
+
+                # fijar ticks y límites coherentes con Altair
+                ax_c.set_xticks(rounds)
+                ax_c.set_xticklabels([f"R{int(r)}" for r in rounds], color='#aaaaaa', fontsize=8)
+                ax_c.set_ylim(0, max_y + max(1, int(max_y * 0.05)))
+
+                ax_c.legend(loc='upper left', fontsize=8, framealpha=0.3,
+                            facecolor=BG2, edgecolor='#444', labelcolor='#ddd', ncol=2)
+
+                buf = _io_jpg.BytesIO()
+                _mplt.savefig(buf, format='jpeg', dpi=150,
+                              bbox_inches='tight', facecolor=BG)
+                _mplt.close(fig)
+                buf.seek(0)
+                return buf.getvalue()
+
+            _c1, _ = st.columns([1, 5])
+            with _c1:
+                if st.button("📸 Exportar JPG", key="btn_export_jpg_standings"):
+                    st.download_button(
+                        label="⬇️ Descargar standings.jpg",
+                        data=_generar_jpg_standings(),
+                        file_name="standings_f1.jpg",
+                        mime="image/jpeg",
+                        key="dl_standings_jpg",
+                    )
+            # ────────────────────────────────────────────────────────────────
+
         else:
-            st.caption("Aún no hay resultados registrados.")
+            # Sin resultados aún: mostrar gráfica vacía con ejes
+            palette = [
+                "#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd",
+                "#8c564b", "#e377c2", "#7f7f7f", "#bcbd22", "#17becf",
+            ]
+            if not usuarios_puntos.empty:
+                _nombres = usuarios_puntos["username"].tolist()
+                user_color = {u: palette[i % len(palette)] for i, u in enumerate(_nombres)}
+                _zero_rows = [{"round": 0, "Usuario": u, "PuntosAcum": 0} for u in _nombres]
+                import pandas as _pd_tmp
+                chart_df_vacio = _pd_tmp.DataFrame(_zero_rows)
+                chart_vacio = (
+                    alt.Chart(chart_df_vacio)
+                    .mark_line(point=True)
+                    .encode(
+                        x=alt.X("round:Q", title="Round", axis=alt.Axis(grid=False)),
+                        y=alt.Y("PuntosAcum:Q", title="Puntos acumulados",
+                                scale=alt.Scale(domain=[0, 1]),
+                                axis=alt.Axis(grid=True, tickCount=5)),
+                        color=alt.Color(
+                            "Usuario:N",
+                            scale=alt.Scale(
+                                domain=list(user_color.keys()),
+                                range=list(user_color.values()),
+                            ),
+                            legend=None,
+                        ),
+                    )
+                )
+                st.altair_chart(chart_vacio, use_container_width=True)
+            else:
+                st.caption("Aún no hay resultados registrados.")
 
 
 # =========================

@@ -83,11 +83,13 @@ class CalendarTests(unittest.TestCase):
     def test_miami_late_pick_is_allowed_with_review_note(self):
         row=dict(CALENDAR['miami'],id=6,calendario_key='miami')
         pick=dict(usuario_id=2,piloto_id=6,auto_asignado=0,timestamp='2026-05-03T18:00:00')
+        pick['revision'] = {'status':'Permitido'}
         report = audit_race(row,[pick],[],[])['Revisión']
         self.assertIn('Revisión posterior', report)
         self.assertIn('permitido(s) por el administrador', report)
         row=dict(CALENDAR['canada'],id=7,calendario_key='canada')
         pick['timestamp']='2026-05-24T21:00:00'
+        pick.pop('revision')
         self.assertIn('posteriores al cierre',audit_race(row,[pick],[],[])['Revisión'])
 
 if __name__=='__main__': unittest.main()

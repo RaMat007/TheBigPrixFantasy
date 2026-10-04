@@ -93,7 +93,6 @@ def init_db():
     cur.execute("ALTER TABLE carreras ADD COLUMN IF NOT EXISTS hora TEXT")
     cur.execute("ALTER TABLE carreras ADD COLUMN IF NOT EXISTS calendario_key TEXT")
     cur.execute("ALTER TABLE carreras ADD COLUMN IF NOT EXISTS cancelada BOOLEAN NOT NULL DEFAULT FALSE")
-    cur.execute("ALTER TABLE picks ADD COLUMN IF NOT EXISTS auto_asignado INTEGER DEFAULT 0")
 
     cur.execute("""
     CREATE TABLE IF NOT EXISTS pilotos (
@@ -131,6 +130,8 @@ def init_db():
         FOREIGN KEY (piloto_id) REFERENCES pilotos(id)
     )
     """)
+
+    cur.execute("ALTER TABLE picks ADD COLUMN IF NOT EXISTS auto_asignado INTEGER DEFAULT 0")
 
     cur.execute("""
     CREATE TABLE IF NOT EXISTS picks_temporada (
@@ -171,6 +172,9 @@ def init_db():
     """)
 
     _seed_admin(cur)
+
+    from operations import ensure_schema
+    ensure_schema(conn)
 
     conn.commit()
     conn.close()

@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import ssl
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
@@ -160,7 +160,7 @@ def obtener_alineacion(carrera: dict) -> dict:
     )
 
 
-def obtener_clasificacion(carrera: dict) -> dict:
+def obtener_clasificacion(carrera: dict, strict=False) -> dict:
     """Obtiene la carrera OpenF1 más cercana por fecha y su clasificación final.
 
     La coincidencia se limita a 36 horas para impedir que una selección errónea
@@ -175,6 +175,15 @@ def obtener_clasificacion(carrera: dict) -> dict:
         raise OpenF1Error(f"OpenF1 no devolvió carreras para {inicio_local.year}.")
 
     sesion, _ = _meeting_for_race(carrera, sesiones)
+
+    if strict:
+        from calendar_2026 import identify_race, normalize
+        identity = identify_race(carrera)
+        labels = normalize(' '.join(str(sesion.get(k) or '') for k in ('location','country_name','circuit_short_name')))
+        if not any(normalize(alias).strip(', -') in labels for alias in identity['aliases']):
+            raise OpenF1Error('La identidad del GP en OpenF1 no coincide; requiere revisión.')
+        if not sesion.get('date_end') or _as_utc(sesion['date_end']) > datetime.now(timezone.utc):
+            raise OpenF1Error('Todavía no se puede confirmar el final de la sesión Race.')
 
     if sesion.get("date_end") and _as_utc(sesion["date_end"]) > datetime.now(timezone.utc):
         raise OpenF1Error("La carrera seleccionada todavía no ha terminado.")
@@ -220,6 +229,16 @@ def obtener_clasificacion(carrera: dict) -> dict:
         raise OpenF1Error("La clasificación recibida está vacía o contiene posiciones repetidas.")
     if any(not r["codigo"] for r in resultados):
         raise OpenF1Error("OpenF1 devolvió pilotos sin código identificable.")
+    if strict:
+        numbers = [r['numero'] for r in resultados]
+        if len(pilotos) < 20 or len(numbers) != len(set(numbers)) or set(numbers) != set(codigos):
+            raise OpenF1Error('La clasificación todavía no incluye a todos los participantes de la sesión.')
+        for row in resultados:
+            if row['dns'] or row['dsq']:
+                row['posicion'] = None
+        positions = [r['posicion'] for r in resultados if r['posicion'] is not None]
+        if not {1,2,3,4,5}.issubset(positions):
+            raise OpenF1Error('Falta confirmar el Top 5; no se publican resultados parciales.')
 
     resultados.sort(key=lambda r: r["posicion"] if r["posicion"] is not None else 999)
     return {
@@ -229,3 +248,27 @@ def obtener_clasificacion(carrera: dict) -> dict:
         "fecha": sesion.get("date_start") or "",
         "resultados": resultados,
     }
+
+
+def proponer_calendario(carreras):
+    """Solo propone fechas por identidad; no interpreta ausencia como cancelación."""
+    from calendar_2026 import identify_race, normalize
+    if not carreras:
+        return []
+    year = _as_utc(carreras[0]['inicio']).year
+    sessions = _get_json('sessions', year=year, session_name='Race')
+    proposals = []
+    for row in carreras:
+        local = dict(row)
+        identity = identify_race(row)
+        matches = []
+        for session in sessions:
+            label = normalize(' '.join(str(session.get(k) or '') for k in ('location','country_name','circuit_short_name')))
+            if session.get('date_start') and any(normalize(a).strip(', -') in label for a in identity['aliases']):
+                matches.append(session)
+        # La fecha ayuda a separar múltiples GP de un mismo país. Nunca decide cancelaciones.
+        matches.sort(key=lambda s: abs(_as_utc(s['date_start'])-_as_utc(row['inicio'])))
+        if matches and (len(matches)==1 or abs(_as_utc(matches[0]['date_start'])-_as_utc(row['inicio'])) < timedelta(hours=36)):
+            local['inicio'] = _as_utc(matches[0]['date_start']).replace(tzinfo=None).isoformat()
+        proposals.append(local)
+    return proposals

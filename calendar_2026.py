@@ -51,19 +51,25 @@ def audit_race(row, picks, results, points):
     """Diagnóstico de solo lectura; no inventa ni reasigna elecciones históricas."""
     from datetime import datetime, timezone, timedelta
     from rules import calcular_puntos
-    race = identify_race(row)
+    race = dict(identify_race(row))
+    for field in ('round','nombre','inicio','cancelada'):
+        if row.get(field) is not None:
+            race[field] = row[field]
     problems = []
     expected = OFFICIAL_TOP5.get(race['key'])
+    start = datetime.fromisoformat(str(race['inicio']).replace('Z','+00:00'))
+    start = start.replace(tzinfo=timezone.utc) if start.tzinfo is None else start.astimezone(timezone.utc)
+    completed = start <= datetime.now(timezone.utc)
     codes = {r['posicion']: r['codigo'].upper() for r in results}
     if race['cancelada']:
         if picks or results or points:
             problems.append('Registros archivados de GP cancelado; excluidos de puntuación')
-    elif expected:
+    elif expected or completed:
         if not picks:
             problems.append('Sin picks vinculados a este ID; revisar secuencia temporal y posibles vínculos a otro GP')
         if not results:
             problems.append('Faltan resultados')
-        elif tuple(codes.get(i) for i in range(1, 6)) != expected:
+        elif expected and not row.get('result_source_verified') and tuple(codes.get(i) for i in range(1, 6)) != expected:
             problems.append('Top 5 no coincide con F1; revisar identidad de resultados')
     elif results or any(p['puntos'] for p in points):
         problems.append('GP pendiente con resultados o puntos anticipados')
@@ -75,8 +81,9 @@ def audit_race(row, picks, results, points):
         errors += sum(uid not in expected_points for uid in points_by_user)
         if errors:
             problems.append(f'{errors} registros de puntos inconsistentes con picks/resultados')
-    cutoff = datetime.fromisoformat(race['inicio']).replace(tzinfo=timezone.utc) - timedelta(minutes=15)
+    cutoff = start - timedelta(minutes=15)
     late = 0
+    allowed_late = 0
     invalid_times = 0
     for pick in picks:
         if pick.get('auto_asignado'):
@@ -84,14 +91,17 @@ def audit_race(row, picks, results, points):
         try:
             stamp = datetime.fromisoformat(pick['timestamp'].replace('Z','+00:00'))
             stamp = stamp.replace(tzinfo=timezone.utc) if stamp.tzinfo is None else stamp.astimezone(timezone.utc)
-            late += stamp >= cutoff
+            if stamp >= cutoff:
+                if (pick.get('revision') or {}).get('status') == 'Permitido':
+                    allowed_late += 1
+                else:
+                    late += 1
         except (ValueError, TypeError, AttributeError):
             invalid_times += 1
     if late and not race['cancelada']:
-        if race['key'] == 'miami':
-            problems.append(f'Revisión posterior: {late} pick(s) manual(es) fuera del cierre corregido, permitido(s) por el administrador')
-        else:
-            problems.append(f'{late} picks manuales posteriores al cierre; revisar')
+        problems.append(f'{late} picks manuales posteriores al cierre; revisar')
+    if allowed_late:
+        problems.append(f'Revisión posterior: {allowed_late} pick(s) fuera del cierre permitido(s) por el administrador; nota guardada')
     if invalid_times:
         problems.append(f'{invalid_times} fechas de picks inválidas')
     if race['key']=='bahrain' and any(p.get('auto_asignado') and p['timestamp'][:10] < '2026-07-26' for p in picks):
