@@ -15,7 +15,7 @@ type Summary = {
  remaining:number
 }
 const utc=(s:string)=>new Date(/[zZ]$|[+-]\d\d:\d\d$/.test(s)?s:s+'Z').getTime()
-const palette=['#00eaff','#f43f5e','#a78bfa','#fbbf24','#34d399','#60a5fa','#f472b6','#fb923c','#c084fc','#22d3ee','#84cc16','#e879f9','#f97316']
+const palette=['#ed3645','#ff7882','#c72b3b','#a7acb5','#ffffff','#7e8795','#ffabb1','#636d7b','#dd5664','#b8bec8','#8b2331','#e2e5e9','#6d1823']
 
 export default function Dashboard({user,races,drivers,onCalendar}:{
  user:{id:number;username:string;escuderia:string;is_admin?:number}|null
@@ -26,6 +26,7 @@ export default function Dashboard({user,races,drivers,onCalendar}:{
  const [busy,setBusy]=useState(false)
  const [message,setMessage]=useState('')
  const [now,setNow]=useState(Date.now())
+ const [showAll,setShowAll]=useState(false)
  useEffect(()=>{const id=window.setInterval(()=>setNow(Date.now()),1000);return()=>window.clearInterval(id)},[])
  useEffect(()=>{
   if(!user){setData(null);setChosen('');return}
@@ -120,11 +121,11 @@ export default function Dashboard({user,races,drivers,onCalendar}:{
    <article><span>CARRERAS RESTANTES</span><strong>{data?.remaining??races.filter(r=>utc(r.inicio)>now).length}</strong></article>
   </div>
   {user&&<>
-   <div className="bpx-head"><h2>Standings General</h2><span>Temporada activa</span></div>
+   <div className="bpx-head"><h2>Clasificación del campeonato</h2><button className="bpx-link" onClick={()=>setShowAll(v=>!v)}>{showAll?"VER TOP 5":"VER TABLA COMPLETA"} <ChevronRight size={15}/></button></div>
    <div className="bpx-table-wrap">
     <table className="bpx-table">
      <thead><tr><th>POS</th><th>CAMBIO</th><th>ESCUDERÍA</th><th>TOTAL</th>{rounds.map(r=><th key={r}>R{r}</th>)}</tr></thead>
-     <tbody>{standings.map((s,i)=><tr key={s.id} className={s.id===user.id?'bpx-self':''}>
+     <tbody>{(showAll?standings:standings.slice(0,5)).map((s,i)=><tr key={s.id} className={s.id===user.id?'bpx-self':''}>
       <td>#{s.position}</td>
       <td style={{color:s.change===null?'#aaa':s.change>0?'#40d98f':s.change<0?'#f87171':'#aaa'}}>
        {s.change===null?'—':s.change>0?'▲'+s.change:s.change<0?'▼'+Math.abs(s.change):'●'}
@@ -137,7 +138,7 @@ export default function Dashboard({user,races,drivers,onCalendar}:{
     {!standings.length&&<p className="bpx-muted">Sin participantes registrados.</p>}
    </div>
    <div className="bpx-lower">
-    <section className="bpx-chart-panel"><h2>Evolución de puntos</h2>
+    <section className="bpx-chart-panel"><h2>La batalla por el campeonato</h2>
      {rounds.length?<><svg viewBox="0 0 950 290" role="img" aria-label="Puntos acumulados por ronda">
       {[0,.25,.5,.75,1].map(t=><g key={t}>
        <line x1="45" x2="920" y1={chartY(maxPts*t)} y2={chartY(maxPts*t)} stroke="#35404e" strokeDasharray="3 5"/>
@@ -148,7 +149,7 @@ export default function Dashboard({user,races,drivers,onCalendar}:{
        accumulated+=s.scores[String(r)]||0
        return `${chartX(j+1)},${chartY(accumulated)}`
       })];return <polyline key={s.id} points={coords.join(' ')} fill="none"
-       stroke={palette[i%palette.length]} strokeWidth={s.id===user.id?4:2}
+       stroke={palette[i%palette.length]} strokeWidth={s.id===user.id?5:2}
        strokeOpacity={s.id===user.id?1:.7}/>})}
      </svg><div className="bpx-legend">{standings.map((s,i)=><span key={s.id}>
       <i style={{background:palette[i%palette.length]}}/>{s.escuderia}
