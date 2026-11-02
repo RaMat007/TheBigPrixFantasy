@@ -1,0 +1,52 @@
+
+/* BIGPRIX REACT · INICIO */
+.bpx-dashboard{display:grid;gap:22px}
+.bpx-top{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:18px}
+.bpx-next,.bpx-choice,.bpx-chart-panel,.bpx-five{background:#1d222b;border:1px solid #343d49;border-radius:17px;padding:22px;min-width:0;color:#e9eef5}
+.bpx-next{position:relative;overflow:hidden;min-height:290px}
+.bpx-next h2{font-size:clamp(1.4rem,3vw,2.1rem);margin:16px 0 6px;color:#fff}
+.bpx-next p{color:#aeb7c5}
+.bpx-kicker{display:flex;align-items:center;gap:7px;color:#00eaff;font-size:.75rem;font-weight:800;letter-spacing:.1em}
+.bpx-clock{display:block;font-size:clamp(1.5rem,3.3vw,2.3rem);margin:24px 0 4px;color:#fff;font-variant-numeric:tabular-nums}
+.bpx-next small{display:block;color:#aeb7c5}
+.bpx-link{margin-top:18px;display:inline-flex;align-items:center;gap:6px;color:#00eaff;background:none;border:0;cursor:pointer;font-weight:800}
+.bpx-track{position:absolute;right:-25px;bottom:-65px;width:42%;opacity:.5;pointer-events:none}
+.bpx-choice select{width:100%;padding:12px;margin:18px 0 12px;border:1px solid #455366;border-radius:10px;background:#111722;color:#fff;font-size:.95rem}
+.bpx-driver{display:flex;min-height:116px;justify-content:space-between;align-items:center;gap:8px;padding:15px;border:1px solid #344352;border-radius:12px;background:#151c25;overflow:hidden}
+.bpx-driver div{display:grid;gap:4px}
+.bpx-driver div span{font-size:.9rem;font-weight:800}
+.bpx-driver strong{font-size:1.2rem;color:#fff}
+.bpx-driver small{color:#aeb7c5}
+.bpx-driver img{height:102px;width:94px;object-fit:contain;align-self:end}
+.bpx-choice-foot{font-size:.76rem;color:#9aadc1;margin:12px 0}
+.bpx-save{display:flex;align-items:center;justify-content:center;gap:7px;background:#00cce5;color:#08131a;border:0;border-radius:10px;width:100%;padding:13px;font-weight:900;cursor:pointer}
+.bpx-save:disabled{cursor:not-allowed;opacity:.5}
+.bpx-message{font-size:.85rem;color:#00eaff}
+.bpx-muted{color:#9cabb9;padding:20px 0}
+.bpx-kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+.bpx-kpis article{background:#1d222b;border:1px solid #343d49;border-radius:12px;padding:16px;min-width:0}
+.bpx-kpis span{display:block;font-size:.68rem;letter-spacing:.065em;color:#9eabba;font-weight:800}
+.bpx-kpis strong{display:block;margin-top:10px;font-size:clamp(1.35rem,2.5vw,2.25rem);color:#fff}
+.bpx-kpis article:first-child strong{color:#00eaff}
+.bpx-head{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.bpx-head h2,.bpx-lower h2{font-size:1.15rem;margin:0}
+.bpx-head span{font-size:.75rem;color:#9cabb9}
+.bpx-table-wrap{max-width:100%;overflow-x:auto;background:#1d222b;border:1px solid #343d49;border-radius:13px}
+.bpx-table{width:100%;border-collapse:collapse;white-space:nowrap;font-size:.82rem}
+.bpx-table th{padding:12px 14px;text-align:center;background:#101722;color:#99a7b8}
+.bpx-table td{padding:10px 14px;text-align:center;border-top:1px solid #303a46;color:#dce4ee}
+.bpx-table td:nth-child(3){text-align:left;font-weight:700}
+.bpx-table tbody tr:nth-child(even){background:#232b35}
+.bpx-table tbody tr.bpx-self{background:#17333b}
+.bpx-table i,.bpx-legend i{display:inline-block;height:9px;width:9px;border-radius:50%;margin-right:8px}
+.bpx-table .bpx-total{color:#00eaff;font-weight:900}
+.bpx-lower{display:grid;grid-template-columns:minmax(0,2fr) minmax(240px,1fr);gap:18px}
+.bpx-chart-panel svg{width:100%;height:auto;overflow:visible;margin-top:18px}
+.bpx-legend{display:flex;flex-wrap:wrap;gap:8px 13px;font-size:.7rem;color:#b8c5d2}
+.bpx-five h2{display:flex;align-items:center;gap:9px;margin-bottom:18px}
+.bpx-five-row{display:flex;gap:12px;align-items:center;padding:12px 0;border-top:1px solid #36404e;font-size:.83rem}
+.bpx-five-row>span{color:#00eaff;font-weight:800}
+.bpx-five-row>strong{flex:1}
+.bpx-five-row>small{color:#9dabb8}
+@media(max-width:850px){.bpx-top,.bpx-lower{grid-template-columns:1fr}.bpx-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.bpx-track{width:30%}}
+@media(max-width:500px){.bpx-kpis article{padding:13px}.bpx-next,.bpx-choice,.bpx-chart-panel,.bpx-five{padding:16px}.bpx-top{gap:12px}.bpx-track{display:none}}
