@@ -198,8 +198,8 @@ def update_profile(body: ProfileUpdate, user=Depends(current_user)):
         except (ValueError, binascii.Error):
             raise HTTPException(422, detail="La imagen no es válida")
         valid = (
-            raw.startswith(b"\\x89PNG\\r\\n\\x1a\\n")
-            or raw.startswith(b"\\xff\\xd8\\xff")
+            raw.startswith(b"\x89PNG\r\n\x1a\n")
+            or raw.startswith(b"\xff\xd8\xff")
             or (raw.startswith(b"RIFF") and raw[8:12] == b"WEBP")
         )
         if not valid or len(raw) > 2 * 1024 * 1024:
