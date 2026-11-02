@@ -1,8 +1,4 @@
-"""API de lectura inicial para BigPrix React 2.0.
-
-No ejecuta init_db ni modifica tablas. La administración y los picks
-permanecen exclusivamente en la aplicación actual hasta migrar su autenticación.
-"""
+"""API de BigPrix React 2.0; comparte PostgreSQL con Streamlit sin init_db."""
 from contextlib import contextmanager
 import os
 from pathlib import Path
@@ -15,6 +11,11 @@ from pydantic import BaseModel, Field
 from itsdangerous import URLSafeTimedSerializer, BadSignature
 import hashlib
 import hmac
+import base64
+import binascii
+from psycopg2 import IntegrityError
+from api.track_layouts import track_layout
+from api.dashboard_routes import install_dashboard_routes
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from db import get_connection
@@ -36,7 +37,7 @@ def cursor():
 
 @app.get("/api/health")
 def health():
-    return {"status": "ok", "mode": "read-only"}
+    return {"status": "ok", "mode": "picks-enabled"}
 
 
 @app.get("/api/season")
@@ -52,6 +53,8 @@ def season():
                 FROM carreras WHERE temporada_id = %s AND NOT cancelada ORDER BY round
             """, (active["id"],))
             races = [dict(row) for row in cur.fetchall()]
+            for race in races:
+                race["layout"] = track_layout(race.get("pista"))
             return {"season": dict(active), "races": races}
     except Exception:
         raise HTTPException(503, detail="No se pudo consultar el calendario")
@@ -91,7 +94,7 @@ def current_user(request: Request):
     except (BadSignature, ValueError, TypeError):
         raise HTTPException(401, detail="Sesión inválida")
     with cursor() as cur:
-        cur.execute("SELECT id, username, nombre, escuderia, is_admin FROM usuarios WHERE id=%s", (uid,))
+        cur.execute("SELECT id, username, nombre, escuderia, is_admin, foto_perfil FROM usuarios WHERE id=%s", (uid,))
         user = cur.fetchone()
     if not user:
         raise HTTPException(401, detail="Usuario no encontrado")
@@ -100,7 +103,7 @@ def current_user(request: Request):
 @app.post("/api/auth/login")
 def login(body: Credentials, response: Response, request: Request):
     with cursor() as cur:
-        cur.execute("SELECT id, username, nombre, escuderia, is_admin, password_hash FROM usuarios WHERE username=%s", (body.username,))
+        cur.execute("SELECT id, username, nombre, escuderia, is_admin, foto_perfil, password_hash FROM usuarios WHERE username=%s", (body.username,))
         row = cur.fetchone()
     digest = hashlib.sha256(body.password.encode()).hexdigest()
     if not row or not hmac.compare_digest(digest, row["password_hash"] or ""):
@@ -108,7 +111,7 @@ def login(body: Credentials, response: Response, request: Request):
     secure = os.getenv("BIGPRIX_COOKIE_SECURE", "true").lower() == "true"
     response.set_cookie(SESSION_NAME, signer().dumps(str(row["id"])), max_age=SESSION_SECONDS,
         httponly=True, secure=secure, samesite="lax", path="/api")
-    return {"user": {k: row[k] for k in ("id", "username", "nombre", "escuderia", "is_admin")}}
+    return {"user": {k: row[k] for k in ("id", "username", "nombre", "escuderia", "is_admin", "foto_perfil")}}
 
 @app.post("/api/auth/logout")
 def logout(response: Response):
@@ -146,9 +149,83 @@ def leaderboard(user=Depends(current_user)):
           SELECT u.id, COALESCE(NULLIF(u.escuderia,''),u.username) AS escuderia,
                  COALESCE(SUM(pt.puntos),0)::integer AS puntos
           FROM usuarios u
-          LEFT JOIN puntos pt ON pt.usuario_id=u.id
-          LEFT JOIN carreras c ON c.id=pt.carrera_id AND c.temporada_id=%s
+          LEFT JOIN (
+              SELECT p.usuario_id, p.puntos
+              FROM puntos p JOIN carreras c ON c.id=p.carrera_id
+              WHERE c.temporada_id=%s AND NOT c.cancelada
+          ) pt ON pt.usuario_id=u.id
+          WHERE u.is_admin=0
           GROUP BY u.id, u.username, u.escuderia
           ORDER BY puntos DESC, escuderia ASC
         """, (season["id"],))
         return {"ranking": [dict(r) for r in cur.fetchall()]}
+
+# PERFIL (misma estructura que la versión de ZEUS)
+class ProfileUpdate(BaseModel):
+    nombre: str = Field(max_length=120)
+    apellido: str = Field(max_length=120)
+    escuderia: str = Field(min_length=1, max_length=120)
+    correo: str = Field(max_length=254)
+    foto_perfil: str | None = Field(default=None, max_length=2800000)
+
+
+@app.get("/api/me/profile")
+def read_profile(user=Depends(current_user)):
+    with cursor() as cur:
+        cur.execute("""
+            SELECT id, username, nombre, apellido, escuderia, correo, foto_perfil
+            FROM usuarios WHERE id=%s
+        """, (user["id"],))
+        return {"user": dict(cur.fetchone())}
+
+
+@app.put("/api/me/profile")
+def update_profile(body: ProfileUpdate, user=Depends(current_user)):
+    team = body.escuderia.strip()
+    email = body.correo.strip()
+    if not team:
+        raise HTTPException(422, detail="Escribe el nombre de tu escudería")
+    if email and ("@" not in email or any(ch.isspace() for ch in email)):
+        raise HTTPException(422, detail="Revisa el correo electrónico")
+
+    photo = body.foto_perfil
+    if photo is not None:
+        if photo.startswith("data:"):
+            photo = photo.split(",", 1)[-1]
+        photo = "".join(photo.split())
+        try:
+            raw = base64.b64decode(photo, validate=True)
+        except (ValueError, binascii.Error):
+            raise HTTPException(422, detail="La imagen no es válida")
+        valid = (
+            raw.startswith(b"\\x89PNG\\r\\n\\x1a\\n")
+            or raw.startswith(b"\\xff\\xd8\\xff")
+            or (raw.startswith(b"RIFF") and raw[8:12] == b"WEBP")
+        )
+        if not valid or len(raw) > 2 * 1024 * 1024:
+            raise HTTPException(422, detail="Usa PNG, JPG o WEBP de hasta 2 MB")
+
+    conn = get_connection()
+    try:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute("""
+                UPDATE usuarios
+                SET nombre=%s, apellido=%s, escuderia=%s, correo=%s,
+                    foto_perfil=COALESCE(%s, foto_perfil)
+                WHERE id=%s
+                RETURNING id, username, nombre, apellido, escuderia,
+                          correo, foto_perfil
+            """, (body.nombre.strip(), body.apellido.strip(), team,
+                  email or None, photo, user["id"]))
+            updated = dict(cur.fetchone())
+        conn.commit()
+        return {"user": updated}
+    except IntegrityError:
+        conn.rollback()
+        raise HTTPException(409, detail="Ese correo o escudería ya está registrado")
+    finally:
+        conn.close()
+
+
+# Registro de las rutas del dashboard React
+install_dashboard_routes(app, current_user)
